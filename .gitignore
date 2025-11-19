@@ -1,0 +1,35 @@
+# 编译输出
+webhook-listener
+webhook-listener.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 测试二进制文件
+*.test
+
+# 配置文件（包含敏感信息）
+config.yaml
+*.yaml
+!config.example.yaml
+
+# Go 相关
+vendor/
+*.mod.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log
+
+/bin

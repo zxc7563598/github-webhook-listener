@@ -1,0 +1,48 @@
+# GitHub Webhook Listener 配置文件示例
+# 
+# 配置说明：
+# - repos: 仓库配置映射，key 为仓库全名 (格式: owner/repo)
+# - secret: GitHub Webhook Secret，用于签名验证（必填）
+# - rules: 规则列表，按事件类型和分支匹配
+#   - event: GitHub 事件类型（如 push, pull_request, release 等）
+#   - branches: 分支列表，空数组表示匹配所有分支
+#   - actions: 操作列表
+#     - type: 操作类型，目前支持 "shell"
+#     - command: Shell 命令
+
+repos:
+  # 示例：配置一个仓库
+  "your-username/your-repo":
+    # GitHub Webhook Secret（在 GitHub 仓库设置中配置）
+    secret: "your-github-webhook-secret-here"
+    rules:
+      # 规则1: 当 main 分支有 push 事件时触发
+      - event: "push"
+        branches: ["main", "master"]
+        actions:
+          - type: "shell"
+            command: "cd /path/to/your/project && git pull && ./deploy.sh"
+      
+      # 规则2: 当任何分支有 pull_request 事件时触发
+      - event: "pull_request"
+        branches: []  # 空数组表示所有分支
+        actions:
+          - type: "shell"
+            command: "echo 'Pull request event received'"
+      
+      # 规则3: 当有 release 事件时触发
+      - event: "release"
+        branches: []
+        actions:
+          - type: "shell"
+            command: "echo 'New release published'"
+  
+  # 可以配置多个仓库
+  # "another-owner/another-repo":
+  #   secret: "another-secret"
+  #   rules:
+  #     - event: "push"
+  #       branches: ["main"]
+  #       actions:
+  #         - type: "shell"
+  #           command: "echo 'Another repo updated'"
