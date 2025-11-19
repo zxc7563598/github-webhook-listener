@@ -1,5 +1,4 @@
 # 编译输出
-webhook-listener
 webhook-listener.exe
 *.exe
 *.dll
