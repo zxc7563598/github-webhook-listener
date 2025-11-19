@@ -73,14 +73,14 @@ The default port is `9000`, and the default configuration file is `config.yaml`.
 
 ```yaml
 repos:
-  "owner/repo":
-    secret: "GitHub Webhook Secret" # Required
+  "Full name of warehouse (owner/repo)":
+    secret: "GitHub Webhook Secret"   # Required for signature verification
     rules:
-      - event: "push"
-        branches: ["main"]
+      - event: "push"                 # GitHub event types
+        branches: ["main"]            # Branch list (empty array representing all branches)
         actions:
-          - type: "shell"
-            command: "echo deploy"
+          - type: "shell"             # Operation Type
+            command: "echo 'deploy'"  # Shell command
 ```
 
 ### Supported Event Types
@@ -112,7 +112,7 @@ Configure:
 
 ---
 
-## API Endpoints
+## API
 
 ### POST /webhook
 

@@ -73,14 +73,14 @@ repos:
 
 ```yaml
 repos:
-  "owner/repo":
-    secret: "GitHub Webhook Secret" # 必填
+  "仓库全名 (owner/repo)":
+    secret: "GitHub Webhook Secret"   # 必填，用于签名验证
     rules:
-      - event: "push"
-        branches: ["main"]
+      - event: "push"                 # GitHub 事件类型
+        branches: ["main"]            # 分支列表（空数组表示所有分支）
         actions:
-          - type: "shell"
-            command: "echo deploy"
+          - type: "shell"             # 操作类型
+            command: "echo 'deploy'"  # Shell 命令
 ```
 
 ### 支持事件类型
@@ -112,7 +112,7 @@ repos:
 
 ---
 
-## API 端点
+## API
 
 ### POST /webhook
 
