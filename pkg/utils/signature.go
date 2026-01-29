@@ -1,4 +1,4 @@
-package server
+package utils
 
 import (
 	"crypto/hmac"
@@ -9,7 +9,7 @@ import (
 
 func ValidateGitHubSignature(secret string, body []byte, sigHeader string) bool {
 	if secret == "" {
-		return false // 建议不允许空 secret
+		return false
 	}
 	if sigHeader == "" {
 		return false

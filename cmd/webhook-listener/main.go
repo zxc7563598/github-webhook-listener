@@ -12,13 +12,21 @@ import (
 	"time"
 
 	"github.com/zxc7563598/github-webhook-listener/internal/config"
-	"github.com/zxc7563598/github-webhook-listener/internal/server"
+	"github.com/zxc7563598/github-webhook-listener/internal/queue"
+	"github.com/zxc7563598/github-webhook-listener/internal/router"
 )
 
 func main() {
 	port := flag.Int("port", 9000, "服务器端口")
+	web := flag.Bool("web", false, "是否开启web")
 	configPath := flag.String("config", "config.yaml", "配置文件路径")
 	flag.Parse()
+
+	// 启动 shell 执行队列
+	scheduler := queue.ShellNewScheduler(3)
+	if err := scheduler.Start(); err != nil {
+		log.Fatal("启动失败:", err)
+	}
 
 	// 加载配置
 	cfg, err := config.LoadConfig(*configPath)
@@ -26,15 +34,13 @@ func main() {
 		log.Fatalf("未能加载配置: %v", err)
 	}
 
-	// 创建HTTP服务器
-	mux := http.NewServeMux()
-	mux.HandleFunc("/webhook", server.MakeWebhookHandler(cfg))
-	mux.HandleFunc("/health", server.HealthHandler)
+	// 构建路由
+	r := router.SetupRouter(*web, *cfg, scheduler)
 
 	addr := fmt.Sprintf(":%d", *port)
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      mux,
+		Handler:      r,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -53,6 +59,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("正在关闭服务器...")
+	scheduler.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

@@ -1,4 +1,4 @@
-.PHONY: build run clean test help
+.PHONY: build run web clean help
 
 # 变量
 BINARY_NAME=webhook-listener
@@ -32,23 +32,21 @@ run:
 	fi
 	@go run $(MAIN_PATH) -config $(CONFIG_FILE) -port $(PORT)
 
+# 运行
+web:
+	@if [ ! -f $(CONFIG_FILE) ]; then \
+		echo "错误: 配置文件 $(CONFIG_FILE) 不存在"; \
+		echo "请先复制 config/config.example.yaml 到 $(CONFIG_FILE) 并修改配置"; \
+		exit 1; \
+	fi
+	@go run $(MAIN_PATH) -config $(CONFIG_FILE) -port $(PORT) -web
+
 # 清理
 clean:
 	@echo "清理构建文件..."
 	@rm -rf $(BUILD_DIR)
 	@go clean
 	@echo "清理完成"
-
-# 测试
-test:
-	@echo "运行测试..."
-	@go test -v ./...
-
-# 安装
-install: build
-	@echo "安装到 /usr/local/bin..."
-	@sudo cp $(BUILD_DIR)/$(BINARY_NAME) /usr/local/bin/
-	@echo "安装完成"
 
 # 交叉编译（Linux）
 build-linux:
