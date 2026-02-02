@@ -23,7 +23,6 @@ repos:
           - type: "shell" ## 必须，固定为 shell
             command: "git pull && ./deploy.sh" ## 必须，要执行的 cmd 命令
             env: ["MY_VAR=hello", "HTTP_PROXY=http://proxy:8080"] ## 非必须，环境变量，约等于一次性的 export
-            args: ["-la", "--color=auto", "/tmp"] ## 非必须，参数，拼接在cmd参数后的内容
             timeout: 300 ## 非必须，允许执行时间，默认 300，单位秒
             retryCount: 0 ## 非必须，失败后重试次数，默认 0
             retryDelay: 0 ## 非必须，失败后间隔多久进行重试，默认 0，单位秒

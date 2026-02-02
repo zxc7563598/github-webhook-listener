@@ -5,9 +5,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/zxc7563598/github-webhook-listener/internal/config"
 	"github.com/zxc7563598/github-webhook-listener/internal/queue"
+	"github.com/zxc7563598/github-webhook-listener/internal/repository"
 )
 
 func (c Container) MakeWebhookService(repoCfg *config.RepoConfig, branch string, event string, repoName string) error {
@@ -30,11 +30,20 @@ func (c Container) MakeWebhookService(repoCfg *config.RepoConfig, branch string,
 			}
 		}
 		log.Printf("[webhook] 仓库 %s 的规则匹配: event=%s, branch=%s", repoName, rule.Event, branch)
+		taskID, err := repository.WebhookLogCreate(
+			fmt.Sprintf("%s:%s", repoName, rule.Event),
+			rule.Actions[0].Command,
+			rule.Actions[0].WorkDir,
+			rule.Actions[0].Timeout,
+			rule.Actions[0].Env,
+		)
+		if err != nil {
+			log.Printf("[database] 创建数据失败:%v", err)
+		}
 		c.shellQueue.AddTask(&queue.ShellTask{
-			ID:         uuid.NewString(),
+			ID:         taskID,
 			Name:       fmt.Sprintf("%s:%s", repoName, rule.Event),
 			Cmd:        rule.Actions[0].Command,
-			Args:       rule.Actions[0].Args,
 			Timeout:    time.Duration(rule.Actions[0].Timeout) * time.Second,
 			RetryCount: rule.Actions[0].RetryCount,
 			RetryDelay: time.Duration(rule.Actions[0].RetryDelay) * time.Second,

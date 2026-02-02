@@ -12,46 +12,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zxc7563598/github-webhook-listener/internal/model"
+	"github.com/zxc7563598/github-webhook-listener/internal/repository"
 	"github.com/zxc7563598/github-webhook-listener/pkg/utils"
 )
-
-// ShellTaskStatus 任务状态
-type ShellTaskStatus int
-
-const (
-	StatusPending   ShellTaskStatus = iota // 0
-	StatusRunning                          // 1
-	StatusSuccess                          // 2
-	StatusFailed                           // 3
-	StatusTimeout                          // 4
-	StatusCancelled                        // 5
-)
-
-func (s ShellTaskStatus) String() string {
-	switch s {
-	case StatusPending:
-		return "待处理"
-	case StatusRunning:
-		return "运行中"
-	case StatusSuccess:
-		return "成功"
-	case StatusFailed:
-		return "失败"
-	case StatusTimeout:
-		return "超时"
-	case StatusCancelled:
-		return "取消"
-	default:
-		return "未知"
-	}
-}
 
 // ShellTask 任务定义
 type ShellTask struct {
 	ID         string        // 任务ID
 	Name       string        // 任务名称
 	Cmd        string        // 执行命令
-	Args       []string      // 命令参数
 	Timeout    time.Duration // 超时时间
 	RetryCount int           // 重试次数
 	RetryDelay time.Duration // 重试延迟
@@ -61,17 +31,17 @@ type ShellTask struct {
 
 // ShellTaskResult 任务执行结果
 type ShellTaskResult struct {
-	TaskID        string          // 任务ID
-	TaskName      string          // 任务名称
-	Status        ShellTaskStatus // 任务状态
-	StartTime     time.Time       // 开始时间
-	EndTime       time.Time       // 结束时间
-	Duration      time.Duration   // 持续时间
-	ExitCode      int             // 退出code
-	StdoutLogPath string          // Stdout输出路径
-	StderrLogPath string          // Stderr输出路径
-	Error         error           // 错误信息
-	RetryCount    int             // 重试次数
+	TaskID        string                 // 任务ID
+	TaskName      string                 // 任务名称
+	Status        model.WebhookLogStatus // 任务状态
+	StartTime     time.Time              // 开始时间
+	EndTime       time.Time              // 结束时间
+	Duration      time.Duration          // 持续时间
+	ExitCode      int                    // 退出code
+	StdoutLogPath string                 // Stdout输出路径
+	StderrLogPath string                 // Stderr输出路径
+	Error         error                  // 错误信息
+	RetryCount    int                    // 重试次数
 }
 
 // Scheduler 调度器
@@ -164,11 +134,7 @@ func (s *ShellScheduler) runCommand(task *ShellTask, output io.Writer, stdoutLog
 	defer cancel()
 	// 创建命令
 	var cmd *exec.Cmd
-	if len(task.Args) > 0 {
-		cmd = exec.CommandContext(ctx, task.Cmd, task.Args...)
-	} else {
-		cmd = exec.CommandContext(ctx, "sh", "-c", task.Cmd)
-	}
+	cmd = exec.CommandContext(ctx, "sh", "-c", task.Cmd)
 
 	// 设置工作目录
 	if task.WorkDir != "" {
@@ -225,7 +191,7 @@ func (s *ShellScheduler) executeTask(workerID int, task *ShellTask) *ShellTaskRe
 	result := &ShellTaskResult{
 		TaskID:        task.ID,
 		TaskName:      task.Name,
-		Status:        StatusRunning,
+		Status:        model.WebhookLogStatusRunning,
 		StartTime:     time.Now(),
 		StdoutLogPath: stdoutLog,
 		StderrLogPath: stderrLog,
@@ -242,6 +208,13 @@ func (s *ShellScheduler) executeTask(workerID int, task *ShellTask) *ShellTaskRe
 	for attempt := 0; attempt <= task.RetryCount; attempt++ {
 		if attempt > 0 {
 			log.Printf("[queue] 任务 %s 第 %d 次重试...", task.Name, attempt)
+			err = repository.WebhookLogRetryUpdate(task.ID, attempt)
+			if err != nil {
+				exitCode = -1
+				result.Status = model.WebhookLogStatusFailed
+				log.Printf("[database] 任务 %s 无法记录重试数据: %v", task.Name, err)
+				break
+			}
 			time.Sleep(task.RetryDelay)
 		}
 
@@ -250,12 +223,12 @@ func (s *ShellScheduler) executeTask(workerID int, task *ShellTask) *ShellTaskRe
 		exitCode, err = s.runCommand(task, &output, result.StdoutLogPath, result.StderrLogPath)
 
 		if err == nil {
-			result.Status = StatusSuccess
+			result.Status = model.WebhookLogStatusSuccess
 			break
 		}
 
 		if attempt == task.RetryCount {
-			result.Status = StatusFailed
+			result.Status = model.WebhookLogStatusFailed
 		}
 	}
 
@@ -288,6 +261,25 @@ func (s *ShellScheduler) resultProcessor() {
 		s.taskResults[result.TaskID] = result
 		s.completedTasks[result.TaskID] = true
 		s.mu.Unlock()
+		// 记录运行信息
+		var errMsg string
+		if result.Error != nil {
+			errMsg = result.Error.Error()
+		}
+
+		err := repository.WebhookLogComplete(
+			result.TaskID,
+			errMsg,
+			result.StdoutLogPath,
+			result.StderrLogPath,
+			result.ExitCode,
+			result.Status,
+			result.StartTime,
+			result.EndTime,
+		)
+		if err != nil {
+			log.Printf("[database] 任务 %s 无法记录处理结果: %v", result.TaskName, err)
+		}
 		// 打印结果
 		fmt.Printf("[queue] 任务完成: %s (%s)\n", result.TaskName, result.TaskID)
 		fmt.Printf("  状态: %s", result.Status)

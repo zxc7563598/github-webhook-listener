@@ -20,25 +20,17 @@ import (
 //  2. 按日期分目录，方便定位与清理
 //  3. 文件名包含时间戳 + 随机串，避免并发冲突
 func GenerateRequestLogPath() (string, error) {
-	// 获取可执行文件路径（可能是软链接）
-	exePath, err := os.Executable()
+	baseDir, err := GetExecutableDir()
 	if err != nil {
-		return "", fmt.Errorf("get executable path failed: %w", err)
+		return "", fmt.Errorf("GetExecutableDir 失败: %w", err)
 	}
-	// 解析软链接，拿到真实路径（非常重要）
-	exePath, err = filepath.EvalSymlinks(exePath)
-	if err != nil {
-		return "", fmt.Errorf("eval executable symlink failed: %w", err)
-	}
-	// 可执行文件所在目录
-	baseDir := filepath.Dir(exePath)
 	// 日期目录：YYYYMMDD
 	dateDir := time.Now().Format("20060102")
 	// logs/shell/YYYYMMDD
 	dirPath := filepath.Join(baseDir, "logs", "shell", dateDir)
 	// 确保目录存在
 	if err := os.MkdirAll(dirPath, 0755); err != nil {
-		return "", fmt.Errorf("create log directory failed: %w", err)
+		return "", fmt.Errorf("创建日志目录失败: %w", err)
 	}
 	// 生成随机文件名
 	fileName, err := randomFileName()
@@ -46,6 +38,21 @@ func GenerateRequestLogPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dirPath, fileName), nil
+}
+
+func GetExecutableDir() (string, error) {
+	// 获取可执行文件路径（可能是软链接）
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("获取可执行路径失败: %w", err)
+	}
+	// 解析软链接，拿到真实路径（非常重要）
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return "", fmt.Errorf("绝对路径获取失败: %w", err)
+	}
+	// 可执行文件所在目录
+	return filepath.Dir(exePath), nil
 }
 
 func randomFileName() (string, error) {

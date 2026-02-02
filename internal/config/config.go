@@ -11,7 +11,6 @@ type ActionConfig struct {
 	Type       string   `yaml:"type"`
 	Command    string   `yaml:"command"`
 	Env        []string `yaml:"env"`
-	Args       []string `yaml:"args"`
 	Timeout    int      `yaml:"timeout"`
 	RetryCount int      `yaml:"retryCount"`
 	RetryDelay int      `yaml:"retryDelay"`
