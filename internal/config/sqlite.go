@@ -38,6 +38,8 @@ func InitSQLiteDB() {
 	if err != nil {
 		log.Fatalf("无法连接 SQLite 数据库: %v", err)
 	}
+	DB.Exec("PRAGMA journal_mode = WAL;")
+	DB.Exec("PRAGMA busy_timeout = 10000;")
 	log.Println("SQLite 数据库连接成功")
 	// 自动创建表
 	err = DB.AutoMigrate(
