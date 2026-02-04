@@ -41,7 +41,7 @@ func InitSQLiteDB() {
 	log.Println("SQLite 数据库连接成功")
 	// 自动创建表
 	err = DB.AutoMigrate(
-		&model.Healthmonitoring{},
+		&model.HealthMonitoring{},
 		&model.WebhookLog{},
 	)
 	if err != nil {

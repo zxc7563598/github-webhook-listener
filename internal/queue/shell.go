@@ -59,8 +59,8 @@ type ShellScheduler struct {
 	completedTasks  map[string]bool             // 已完成任务
 }
 
-// ShellNewScheduler 创建调度器
-func ShellNewScheduler(maxWorkers int) *ShellScheduler {
+// NewShellScheduler 创建调度器
+func NewShellScheduler(maxWorkers int) *ShellScheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &ShellScheduler{
 		maxWorkers:      maxWorkers,

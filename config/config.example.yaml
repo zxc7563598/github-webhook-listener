@@ -41,6 +41,9 @@ repos:
         actions:
           - type: "shell"
             command: "echo 'New release published'"
+    healthcheck: ## 非必须，健康监控，配置后可以进行健康监控
+      url: "https://example.com/health" ## 健康监控的地址，配置后会按照 interval 的间隔发起限时 5 秒的 GET 请求，200/301/302 视为成功
+      interval: 30   # 监控间隔，单位秒
 
   # 可以配置多个仓库
   # "another-owner/another-repo":

@@ -23,9 +23,15 @@ type Rule struct {
 	Actions  []ActionConfig `yaml:"actions"`
 }
 
+type HealthCheckConfig struct {
+	Url      string `yaml:"url"`
+	Interval int    `yaml:"interval"` // 秒
+}
+
 type RepoConfig struct {
-	Secret string `yaml:"secret"`
-	Rules  []Rule `yaml:"rules"`
+	Secret      string             `yaml:"secret"`
+	Rules       []Rule             `yaml:"rules"`
+	HealthCheck *HealthCheckConfig `yaml:"healthcheck,omitempty"`
 }
 
 type Config struct {

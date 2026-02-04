@@ -34,10 +34,14 @@ func main() {
 	}
 
 	// 启动 shell 执行队列
-	scheduler := queue.ShellNewScheduler(3)
+	scheduler := queue.NewShellScheduler(3)
 	if err := scheduler.Start(); err != nil {
 		log.Fatal("启动失败:", err)
 	}
+
+	// 启动健康监控队列
+	healthMonitor := queue.NewHealthMonitor(*cfg)
+	healthMonitor.Start()
 
 	// 构建路由
 	r := router.SetupRouter(*web, *cfg, scheduler, *webUser, *webPass)
@@ -63,7 +67,9 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("正在关闭服务器...")
+	healthMonitor.Stop()
 	scheduler.Stop()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
