@@ -1,4 +1,4 @@
-package dto
+package webhook
 
 type GitHubWebhook struct {
 	Ref        string `json:"ref"`

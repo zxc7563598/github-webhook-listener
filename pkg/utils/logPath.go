@@ -10,15 +10,7 @@ import (
 )
 
 // GenerateRequestLogPath 生成一个用于存放单次请求结果的随机文件路径
-//
-// 路径结构示例：
-//
-//	<exe_dir>/logs/shell/20260127/req_1706341234567_a3f9c2.log
-//
-// 设计说明：
-//  1. 以「可执行文件所在目录」为基准，而不是运行目录
-//  2. 按日期分目录，方便定位与清理
-//  3. 文件名包含时间戳 + 随机串，避免并发冲突
+// 路径结构示例：<exe_dir>/logs/shell/20260127/req_1706341234567_a3f9c2.log
 func GenerateRequestLogPath() (string, error) {
 	baseDir, err := GetExecutableDir()
 	if err != nil {
@@ -40,6 +32,7 @@ func GenerateRequestLogPath() (string, error) {
 	return filepath.Join(dirPath, fileName), nil
 }
 
+// GetExecutableDir 获取可执行文件的绝对路径
 func GetExecutableDir() (string, error) {
 	// 获取可执行文件路径（可能是软链接）
 	exePath, err := os.Executable()
@@ -55,6 +48,7 @@ func GetExecutableDir() (string, error) {
 	return filepath.Dir(exePath), nil
 }
 
+// randomFileName 随机日志名称
 func randomFileName() (string, error) {
 	ts := time.Now().UnixMilli()
 	b := make([]byte, 3)
@@ -66,4 +60,13 @@ func randomFileName() (string, error) {
 		ts,
 		hex.EncodeToString(b),
 	), nil
+}
+
+// readLogFile 读取日志
+func ReadLogFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }

@@ -11,9 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/zxc7563598/github-webhook-listener/internal/bootstrap"
 	"github.com/zxc7563598/github-webhook-listener/internal/config"
-	"github.com/zxc7563598/github-webhook-listener/internal/queue"
-	"github.com/zxc7563598/github-webhook-listener/internal/router"
 )
 
 func main() {
@@ -33,18 +32,8 @@ func main() {
 		log.Fatalf("未能加载配置: %v", err)
 	}
 
-	// 启动 shell 执行队列
-	scheduler := queue.NewShellScheduler(3)
-	if err := scheduler.Start(); err != nil {
-		log.Fatal("启动失败:", err)
-	}
+	r, scheduler, healthMonitor := bootstrap.NewApp(web, cfg, webUser, webPass)
 
-	// 启动健康监控队列
-	healthMonitor := queue.NewHealthMonitor(*cfg)
-	healthMonitor.Start()
-
-	// 构建路由
-	r := router.SetupRouter(*web, *cfg, scheduler, *webUser, *webPass)
 	addr := fmt.Sprintf(":%d", *port)
 	srv := &http.Server{
 		Addr:         addr,

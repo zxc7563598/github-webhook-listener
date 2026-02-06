@@ -1,4 +1,4 @@
-package handler
+package webhook
 
 import (
 	"bytes"
@@ -9,10 +9,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/zxc7563598/github-webhook-listener/internal/dto"
+	webhookDTO "github.com/zxc7563598/github-webhook-listener/internal/dto/webhook"
 	"github.com/zxc7563598/github-webhook-listener/pkg/utils"
 )
 
-func (c Container) MakeWebhookHandler(ctx *gin.Context) {
+func (h *Handler) MakeWebhookHandler(ctx *gin.Context) {
 	// 获取原始数据
 	body, err := ctx.GetRawData()
 	if err != nil {
@@ -21,7 +22,7 @@ func (c Container) MakeWebhookHandler(ctx *gin.Context) {
 	}
 	// 解析数据
 	ctx.Request.Body = io.NopCloser(bytes.NewBuffer(body))
-	var req dto.GitHubWebhook
+	var req webhookDTO.GitHubWebhook
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, dto.Error(http.StatusBadRequest, "请求参数异常", nil))
 		return
@@ -47,7 +48,7 @@ func (c Container) MakeWebhookHandler(ctx *gin.Context) {
 		return
 	}
 	// 查找配置
-	repoCfg, ok := c.cfg.Repos[repoName]
+	repoCfg, ok := h.cfg.Repos[repoName]
 	if !ok {
 		log.Printf("[webhook] 在配置中找不到存储库: %s", repoName)
 		ctx.JSON(http.StatusOK, dto.Error(http.StatusNotFound, "未能找到存储库", nil))
@@ -66,7 +67,7 @@ func (c Container) MakeWebhookHandler(ctx *gin.Context) {
 		return
 	}
 	// 匹配规则
-	if err := c.shellQueueService.MakeWebhookService(repoCfg, branch, event, repoName); err != nil {
+	if err := h.svc.MakeWebhookService(repoCfg, branch, event, repoName); err != nil {
 		log.Printf("[webhook] 匹配规则执行shell失败: %v", err)
 		ctx.JSON(http.StatusInternalServerError, dto.Error(http.StatusInternalServerError, "匹配规则失败", nil))
 		return

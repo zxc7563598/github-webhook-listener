@@ -13,9 +13,17 @@ import (
 	"time"
 
 	"github.com/zxc7563598/github-webhook-listener/internal/model"
-	"github.com/zxc7563598/github-webhook-listener/internal/repository"
 	"github.com/zxc7563598/github-webhook-listener/pkg/utils"
 )
+
+type ShellTaskDispatcher interface {
+	AddTask(task *ShellTask) error
+}
+
+type ShellTaskResultHandler interface {
+	WebhookLogRetryUpdate(taskID string, retryCount int) error
+	WebhookLogComplete(taskID, errMessage, stdout, stderr string, errCode int, status model.WebhookLogStatus, startTime, endTime int64) error
+}
 
 // ShellTask 任务定义
 type ShellTask struct {
@@ -57,10 +65,11 @@ type ShellScheduler struct {
 	cancel          context.CancelFunc          // 取消函数
 	isRunning       bool                        // 是否正在运行
 	completedTasks  map[string]bool             // 已完成任务
+	resultHandler   ShellTaskResultHandler
 }
 
 // NewShellScheduler 创建调度器
-func NewShellScheduler(maxWorkers int) *ShellScheduler {
+func NewShellScheduler(maxWorkers int, handler ShellTaskResultHandler) *ShellScheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &ShellScheduler{
 		maxWorkers:      maxWorkers,
@@ -71,6 +80,7 @@ func NewShellScheduler(maxWorkers int) *ShellScheduler {
 		ctx:             ctx,
 		cancel:          cancel,
 		completedTasks:  make(map[string]bool),
+		resultHandler:   handler,
 	}
 }
 
@@ -208,12 +218,14 @@ func (s *ShellScheduler) executeTask(workerID int, task *ShellTask) *ShellTaskRe
 	for attempt := 0; attempt <= task.RetryCount; attempt++ {
 		if attempt > 0 {
 			log.Printf("[queue] 任务 %s 第 %d 次重试...", task.Name, attempt)
-			err = repository.WebhookLogRetryUpdate(task.ID, attempt)
-			if err != nil {
-				exitCode = -1
-				result.Status = model.WebhookLogStatusFailed
-				log.Printf("[database] 任务 %s 无法记录重试数据: %v", task.Name, err)
-				break
+			if s.resultHandler != nil {
+				err := s.resultHandler.WebhookLogRetryUpdate(task.ID, attempt)
+				if err != nil {
+					exitCode = -1
+					result.Status = model.WebhookLogStatusFailed
+					log.Printf("[database] 任务 %s 无法记录重试数据: %v", task.Name, err)
+					break
+				}
 			}
 			time.Sleep(task.RetryDelay)
 		}
@@ -266,19 +278,20 @@ func (s *ShellScheduler) resultProcessor() {
 		if result.Error != nil {
 			errMsg = result.Error.Error()
 		}
-
-		err := repository.WebhookLogComplete(
-			result.TaskID,
-			errMsg,
-			result.StdoutLogPath,
-			result.StderrLogPath,
-			result.ExitCode,
-			result.Status,
-			result.StartTime,
-			result.EndTime,
-		)
-		if err != nil {
-			log.Printf("[database] 任务 %s 无法记录处理结果: %v", result.TaskName, err)
+		if s.resultHandler != nil {
+			err := s.resultHandler.WebhookLogComplete(
+				result.TaskID,
+				errMsg,
+				result.StdoutLogPath,
+				result.StderrLogPath,
+				result.ExitCode,
+				result.Status,
+				result.StartTime.Unix(),
+				result.EndTime.Unix(),
+			)
+			if err != nil {
+				log.Printf("[database] 任务 %s 无法记录处理结果: %v", result.TaskName, err)
+			}
 		}
 		// 打印结果
 		fmt.Printf("[queue] 任务完成: %s (%s)\n", result.TaskName, result.TaskID)

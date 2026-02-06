@@ -7,25 +7,30 @@ import (
 	"time"
 
 	"github.com/zxc7563598/github-webhook-listener/internal/config"
-	"github.com/zxc7563598/github-webhook-listener/internal/repository"
 )
 
-type HealthMonitor struct {
-	cfg    config.Config
-	client *http.Client
-	ctx    context.Context    // 上下文
-	cancel context.CancelFunc // 取消函数
+type HealthResultHandler interface {
+	HealthMonitoringCreate(project, errMessage string, httpStatus int, responseTimeMs int64) error
 }
 
-func NewHealthMonitor(cfg config.Config) *HealthMonitor {
+type HealthMonitor struct {
+	cfg     *config.Config
+	client  *http.Client
+	ctx     context.Context    // 上下文
+	cancel  context.CancelFunc // 取消函数
+	handler HealthResultHandler
+}
+
+func NewHealthMonitor(cfg *config.Config, handler HealthResultHandler) *HealthMonitor {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &HealthMonitor{
 		cfg: cfg,
 		client: &http.Client{
 			Timeout: 5 * time.Second,
 		},
-		ctx:    ctx,
-		cancel: cancel,
+		ctx:     ctx,
+		cancel:  cancel,
+		handler: handler,
 	}
 }
 
@@ -78,7 +83,8 @@ func (m *HealthMonitor) checkOnce(hc *config.HealthCheckConfig, reposName string
 	resp, err := m.client.Get(hc.Url)
 	if err != nil {
 		log.Printf("[health] %s 请求失败: %v", reposName, err)
-		if err := repository.HealthMonitoringCreate(reposName, err.Error(), -1, 0); err != nil {
+
+		if err := m.handler.HealthMonitoringCreate(reposName, err.Error(), -1, 0); err != nil {
 			log.Printf("[database] 健康监控数据库记录失败: %v", err)
 		}
 		return
@@ -93,7 +99,7 @@ func (m *HealthMonitor) checkOnce(hc *config.HealthCheckConfig, reposName string
 		resp.StatusCode,
 		cost,
 	)
-	if err := repository.HealthMonitoringCreate(reposName, "", resp.StatusCode, cost.Milliseconds()); err != nil {
+	if err := m.handler.HealthMonitoringCreate(reposName, "", resp.StatusCode, cost.Milliseconds()); err != nil {
 		log.Printf("[database] 健康监控数据库记录失败: %v", err)
 	}
 }

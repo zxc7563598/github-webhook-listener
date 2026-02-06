@@ -13,6 +13,8 @@
 repos:
   # 示例：配置一个仓库
   "your-username/your-repo":
+    # 在 Web 控制台展示的名称
+    name: "project name"
     # GitHub Webhook Secret（在 GitHub 仓库设置中配置）
     secret: "your-github-webhook-secret-here"
     rules:

@@ -1,4 +1,4 @@
-package service
+package webhook
 
 import (
 	"fmt"
@@ -7,10 +7,9 @@ import (
 
 	"github.com/zxc7563598/github-webhook-listener/internal/config"
 	"github.com/zxc7563598/github-webhook-listener/internal/queue"
-	"github.com/zxc7563598/github-webhook-listener/internal/repository"
 )
 
-func (c Container) MakeWebhookService(repoCfg *config.RepoConfig, branch string, event string, repoName string) error {
+func (s Service) MakeWebhookService(repoCfg *config.RepoConfig, branch string, event string, repoName string) error {
 	log.Printf("[webhook] 仓库: %s, 事件: %s, 分支: %s", repoName, event, branch)
 	for _, rule := range repoCfg.Rules {
 		if rule.Event != event {
@@ -30,7 +29,7 @@ func (c Container) MakeWebhookService(repoCfg *config.RepoConfig, branch string,
 			}
 		}
 		log.Printf("[webhook] 仓库 %s 的规则匹配: event=%s, branch=%s", repoName, rule.Event, branch)
-		taskID, err := repository.WebhookLogCreate(
+		taskID, err := s.repo.WebhookLogCreate(
 			fmt.Sprintf("%s:%s", repoName, rule.Event),
 			rule.Actions[0].Command,
 			rule.Actions[0].WorkDir,
@@ -40,7 +39,7 @@ func (c Container) MakeWebhookService(repoCfg *config.RepoConfig, branch string,
 		if err != nil {
 			log.Printf("[database] 创建数据失败:%v", err)
 		}
-		c.shellQueue.AddTask(&queue.ShellTask{
+		s.dispatcher.AddTask(&queue.ShellTask{
 			ID:         taskID,
 			Name:       fmt.Sprintf("%s:%s", repoName, rule.Event),
 			Cmd:        rule.Actions[0].Command,

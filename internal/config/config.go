@@ -29,6 +29,7 @@ type HealthCheckConfig struct {
 }
 
 type RepoConfig struct {
+	Name        string             `yaml:"name"`
 	Secret      string             `yaml:"secret"`
 	Rules       []Rule             `yaml:"rules"`
 	HealthCheck *HealthCheckConfig `yaml:"healthcheck,omitempty"`
