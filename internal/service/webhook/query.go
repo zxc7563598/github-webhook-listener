@@ -66,17 +66,16 @@ func (s Service) QueryWebhookLogDetails(id string) (*webhookDTO.WebhookLogDetail
 		}
 	}
 	return &webhookDTO.WebhookLogDetails{
-		ID:           row.ID,
-		Project:      row.Project,
-		Command:      row.Command,
-		Status:       row.Status,
-		StatusString: row.Status.String(),
-		StartTime:    startTime,
-		EndTime:      endTime,
-		ExitCode:     exitCode,
-		Error:        errString,
-		Stdout:       stdout,
-		Stderr:       stderr,
+		ID:        row.ID,
+		Project:   row.Project,
+		Command:   row.Command,
+		Status:    row.Status,
+		StartTime: startTime,
+		EndTime:   endTime,
+		ExitCode:  exitCode,
+		Error:     errString,
+		Stdout:    stdout,
+		Stderr:    stderr,
 	}, nil
 
 }

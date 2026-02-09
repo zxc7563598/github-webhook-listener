@@ -1,9 +1,10 @@
 package health
 
 type HourlyHealthStat struct {
-	HourUnix     int64 `gorm:"column:hour_unix"`
-	TotalCount   int64 `gorm:"column:total_count"`
-	SuccessCount int64 `gorm:"column:success_count"`
+	HourUnix              int64 `gorm:"column:hour_unix"`
+	TotalCount            int64 `gorm:"column:total_count"`
+	SuccessCount          int64 `gorm:"column:success_count"`
+	SuccessResponseTimeMs int64 `gorm:"column:success_response_time_ms"`
 }
 
 type LatestHealthRow struct {

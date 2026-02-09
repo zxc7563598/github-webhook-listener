@@ -23,14 +23,20 @@ func (state OverviewProjectState) String() string {
 	}
 }
 
+type OverviewHistory struct {
+	Hour            string  `json:"hour"`
+	TotalCount      int64   `json:"total_count"`
+	SuccessCount    int64   `json:"success_count"`
+	AverageResponse float64 `json:"average_response"`
+}
+
 type OverviewProject struct {
-	ID               string               `json:"id"`
-	Name             string               `json:"name"`
-	Repositories     string               `json:"repositories"`
-	State            OverviewProjectState `json:"state"`
-	History          []float64            `json:"history"`
-	UptimePercentage float64              `json:"uptimePercentage"`
-	Frequency        int                  `json:"frequency"`
+	ID           string               `json:"id"`
+	Name         string               `json:"name"`
+	Repositories string               `json:"repositories"`
+	State        OverviewProjectState `json:"state"`
+	History      []OverviewHistory    `json:"history"`
+	Frequency    int                  `json:"frequency"`
 }
 
 type OverviewLog struct {
@@ -49,17 +55,16 @@ type Overview struct {
 }
 
 type WebhookLogDetails struct {
-	ID           string
-	Project      string
-	Command      string
-	Status       model.WebhookLogStatus
-	StatusString string
-	StartTime    string
-	EndTime      string
-	ExitCode     int
-	Error        string
-	Stdout       string
-	Stderr       string
+	ID        string                 `json:"id"`
+	Project   string                 `json:"project"`
+	Command   string                 `json:"command"`
+	Status    model.WebhookLogStatus `json:"status"`
+	StartTime string                 `json:"startTime"`
+	EndTime   string                 `json:"endTime"`
+	ExitCode  int                    `json:"exitCode"`
+	Error     string                 `json:"error"`
+	Stdout    string                 `json:"stdout"`
+	Stderr    string                 `json:"stderr"`
 }
 
 type GetWebhookLogDetailsRequest struct {

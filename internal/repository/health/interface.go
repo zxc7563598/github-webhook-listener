@@ -2,7 +2,6 @@ package health
 
 import (
 	"fmt"
-	"math"
 	"time"
 
 	healthDTO "github.com/zxc7563598/github-webhook-listener/internal/dto/health"
@@ -12,7 +11,7 @@ import (
 type HealthRepository interface {
 	HealthMonitoringCreate(project, errMessage string, httpStatus int, responseTimeMs int64) error
 	QueryLatestHealthByProject() (map[string]healthDTO.LatestHealthRow, error)
-	QueryProjectHealthLast24Hours(project string) ([]float64, error)
+	QueryProjectHealthLast24Hours(project string, startHour time.Time) ([]healthDTO.HourlyHealthStat, error)
 }
 
 // 记录项目运行信息
@@ -57,23 +56,15 @@ func (r *gormRepo) QueryLatestHealthByProject() (map[string]healthDTO.LatestHeal
 }
 
 // 获取某个项目最近 24 小时的成功率（按小时）
-func (r *gormRepo) QueryProjectHealthLast24Hours(project string) ([]float64, error) {
-	now := time.Now().UTC()
-
-	// 对齐到当前小时整点
-	currentHour := now.Truncate(time.Hour)
-
-	// 24 小时前
-	startHour := currentHour.Add(-24 * time.Hour)
-
-	result := make([]float64, 24)
-
+func (r *gormRepo) QueryProjectHealthLast24Hours(project string, startHour time.Time) ([]healthDTO.HourlyHealthStat, error) {
 	var stats []healthDTO.HourlyHealthStat
+	// 查询数据
 	err := r.db.Model(&model.HealthMonitoring{}).
 		Select(`
 			(created_at_unix / 3600) * 3600 AS hour_unix,
 			COUNT(*) AS total_count,
-			SUM(CASE WHEN http_status = 200 THEN 1 ELSE 0 END) AS success_count
+			SUM(CASE WHEN http_status = 200 THEN 1 ELSE 0 END) AS success_count,
+			SUM(CASE WHEN http_status = 200 THEN response_time_ms ELSE 0 END) AS success_response_time_ms
 		`).
 		Where("project = ? AND created_at_unix >= ?", project, startHour.Unix()).
 		Group("hour_unix").
@@ -82,26 +73,5 @@ func (r *gormRepo) QueryProjectHealthLast24Hours(project string) ([]float64, err
 	if err != nil {
 		return nil, fmt.Errorf("项目 %s 最近 24 小时数据查询失败: %v", project, err)
 	}
-
-	// hour_unix → index
-	hourIndex := make(map[int64]int)
-	for i := 0; i < 24; i++ {
-		hourUnix := startHour.Add(time.Duration(i+1) * time.Hour).Unix()
-		hourIndex[hourUnix] = i
-	}
-
-	// 填充结果
-	for _, stat := range stats {
-		idx, ok := hourIndex[stat.HourUnix]
-		if !ok || stat.TotalCount == 0 {
-			continue
-		}
-
-		percentage := float64(stat.SuccessCount) / float64(stat.TotalCount) * 100
-		result[idx] = math.Round(percentage*100) / 100
-
-		fmt.Printf("索引:%d, 最终结果: %.2f \n", idx, result[idx])
-	}
-
-	return result, nil
+	return stats, nil
 }

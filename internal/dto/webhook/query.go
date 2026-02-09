@@ -16,15 +16,14 @@ type WebhookLogListPage struct {
 }
 
 type WebhookLogDetails struct {
-	ID           string
-	Project      string
-	Command      string
-	Status       model.WebhookLogStatus
-	StatusString string
-	StartTime    string
-	EndTime      string
-	ExitCode     int
-	Error        string
-	Stdout       string
-	Stderr       string
+	ID        string
+	Project   string
+	Command   string
+	Status    model.WebhookLogStatus
+	StartTime string
+	EndTime   string
+	ExitCode  int
+	Error     string
+	Stdout    string
+	Stderr    string
 }
