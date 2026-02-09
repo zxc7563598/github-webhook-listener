@@ -61,3 +61,7 @@ type WebhookLogDetails struct {
 	Stdout       string
 	Stderr       string
 }
+
+type GetWebhookLogDetailsRequest struct {
+	ID string `json:"id"`
+}

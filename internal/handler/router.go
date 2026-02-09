@@ -23,6 +23,8 @@ func Register(isWeb *bool, webUser, webPass *string, r *gin.Engine, webhookHandl
 	})
 	r.POST("/webhook", webhookHandler.MakeWebhookHandler)
 	r.POST("/api/overview", healthHandler.GetOverview)
+	r.POST("/api/webhook-log-details", healthHandler.GetWebhookLogDetails)
+
 	if *isWeb {
 		web := r.Group("/web")
 		web.Use(middleware.WebBasicAuth(webUser, webPass))
