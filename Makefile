@@ -49,14 +49,14 @@ clean:
 	@echo "清理完成"
 
 # 交叉编译（Linux）
-build-linux:
+build-linux: build-web
 	@echo "构建 Linux 版本..."
 	@mkdir -p $(BUILD_DIR)
 	@GOOS=linux GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN_PATH)
 	@echo "构建完成: $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64"
 
 # 交叉编译（macOS）
-build-darwin:
+build-darwin: build-web
 	@echo "构建 macOS 版本..."
 	@mkdir -p $(BUILD_DIR)
 	@GOOS=darwin GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN_PATH)
@@ -64,11 +64,24 @@ build-darwin:
 	@echo "构建完成"
 
 # 交叉编译（Windows）
-build-windows:
+build-windows: build-web
 	@echo "构建 Windows 版本..."
 	@mkdir -p $(BUILD_DIR)
 	@GOOS=windows GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
 	@echo "构建完成: $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe"
+
+build-web:
+	@echo "构建 Web 站点页面..."
+	@command -v npm >/dev/null 2>&1 || { \
+	echo "❌ 未检测到 npm，请先安装 Node.js (https://nodejs.org)"; \
+	exit 1; \
+	}
+	@echo "检测到 npm，开始构建 Web 站点..."
+	@cd ./web && npm install && npm run build
+	@echo "同步 dist 到 internal/webui/dist"
+	@rm -rf ./internal/webui/dist
+	@mkdir -p ./internal/webui
+	@cp -R ./web/dist ./internal/webui/dist
 
 # 构建所有平台
 build-all: build-linux build-darwin build-windows

@@ -32,3 +32,5 @@ Thumbs.db
 *.log
 
 /bin
+
+/internal/webui/dist
