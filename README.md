@@ -1,6 +1,13 @@
 # GitHub Webhook Listener
 
+<div align="center">
+  <a href="./README.md">English</a>｜<a href="./README.zh-CN.md">简体中文</a>
+  <hr width="50%"/>
+</div>
+
 A lightweight Go service for receiving GitHub Webhooks and executing Shell commands. It includes an optional built-in web panel for viewing project status, webhook execution logs, and health check results.
+
+**This project has been parsed by Zread. If you need a quick overview of the project, you can click here to view it：[Understand this project](https://zread.ai/zxc7563598/github-webhook-listener)**
 
 ## Features
 

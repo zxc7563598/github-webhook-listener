@@ -1,6 +1,13 @@
 # GitHub Webhook Listener
 
+<div align="center">
+  <a href="./README.md">English</a>｜<a href="./README.zh-CN.md">简体中文</a>
+  <hr width="50%"/>
+</div>
+
 用于接收 GitHub Webhook 并执行 Shell 命令的轻量级 Go 服务，内置 Web 面板可查看项目运行状态与 Webhook 执行记录。
+
+**本项目已经经由 Zread 解析完成，如果需要快速了解项目，可以点击此处进行查看：[了解本项目](https://zread.ai/zxc7563598/github-webhook-listener)**
 
 ## 功能特性
 
