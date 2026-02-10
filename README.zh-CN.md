@@ -1,99 +1,151 @@
 # GitHub Webhook Listener
 
-<div align="center">
-  <a href="./README.md">English</a>｜<a href="./README.zh-CN.md">简体中文</a>
-  <hr width="50%"/>
-</div>
-
-一个用于接收 GitHub Webhook 并执行 Shell 命令的轻量级 Go 服务。
-
-**本项目已经经由 Zread 解析完成，如果需要快速了解项目，可以点击此处进行查看：[了解本项目](https://zread.ai/zxc7563598/github-webhook-listener)**
-
----
+用于接收 GitHub Webhook 并执行 Shell 命令的轻量级 Go 服务，内置 Web 面板可查看项目运行状态与 Webhook 执行记录。
 
 ## 功能特性
 
-- **安全验证**：支持 GitHub Webhook 签名验证（SHA256）
-- **事件过滤**：按事件类型和分支匹配规则
-- **Shell 执行**：支持执行 Shell 命令，带超时保护（默认 5 分钟）
-- **优雅关闭**：服务退出时等待当前任务执行完成
-- **健康检查**：提供 `/health` 端点
-- **配置验证**：启动时校验配置文件的有效性
-- **请求限制**：限制请求体大小（10MB）并设置合理的超时
+- **Webhook 接收**：接收 GitHub 的 push、pull_request、release 等事件
+- **规则匹配**：按事件类型、分支配置不同规则，触发对应 Shell 命令
+- **Web 面板**：可选开启，查看运行概览、Webhook 日志、健康监控状态（支持 Basic Auth）
+- **健康监控**：可选为每个仓库配置 URL 与间隔，定时探测并记录状态
 
 ---
 
-## 快速开始
+## 部署方式
 
-### 1. 构建
+### 方式一：使用 Releases 预构建（推荐）
+
+在 [Releases](https://github.com/zxc7563598/github-webhook-listener/releases) 下载对应平台的二进制，解压后按下方「启动命令」运行即可。
+
+### 方式二：本地构建与运行
+
+需要本地安装 Go 与（若需 Web 面板）Node.js。
+
+| 命令                 | 说明                                            |
+| -------------------- | ----------------------------------------------- |
+| `make build`         | 构建当前平台可执行文件到 `bin/`                 |
+| `make run`           | 使用项目根目录 `config.yaml` 运行（不开启 Web） |
+| `make web`           | 同上，并开启 Web 面板                           |
+| `make build-linux`   | 构建 Linux amd64（会先执行 `make build-web`）   |
+| `make build-darwin`  | 构建 macOS amd64/arm64                          |
+| `make build-windows` | 构建 Windows amd64                              |
+| `make build-all`     | 构建上述所有平台                                |
+| `make build-web`     | 仅构建前端并拷贝到 `internal/webui/dist`        |
+| `make clean`         | 清理构建产物                                    |
+
+---
+
+## 启动命令
+
+**运行前需将 `config/config.example.yaml` 复制为项目根目录下的 `config.yaml` 并按要求修改（见下方配置说明）。**
 
 ```bash
-go build -o webhook-listener ./cmd/webhook-listener
+./webhook-listener [选项]
 ```
 
-### 2. 创建配置文件
+| 参数      | 默认值      | 说明                                                 |
+| --------- | ----------- | ---------------------------------------------------- |
+| `-port`   | 9000        | HTTP 服务监听端口                                    |
+| `-config` | config.yaml | 配置文件路径                                         |
+| `-web`    | false       | 是否开启 Web 面板（访问 `/web`）                     |
+| `-user`   | （空）      | Web 面板 Basic Auth 用户名（开启 `-web` 时建议设置） |
+| `-pass`   | （空）      | Web 面板 Basic Auth 密码                             |
+
+**示例：**
 
 ```bash
-cp config/config.example.yaml config.yaml
+# 仅 Webhook，端口 9000，使用当前目录 config.yaml
+./webhook-listener -config config.yaml -port 9000
+
+# 开启 Web 面板，并设置 Basic Auth
+./webhook-listener -config config.yaml -port 9000 -web -user admin -pass your-password
 ```
 
-编辑 `config.yaml`：
+GitHub Webhook 回调地址填写：`http(s)://你的域名或IP:端口/webhook`（例如 `https://example.com:9000/webhook`）。
+
+---
+
+## 配置文件说明
+
+配置文件为 YAML，参考 `config/config.example.yaml`。结构概览如下。
+
+### 顶层：`repos`
+
+- key：仓库全名，格式 `owner/repo`（如 `your-username/your-repo`）
+- value：该仓库的配置对象
+
+---
+
+### 每个仓库的配置
+
+| 字段          | 必填   | 说明                                |
+| ------------- | ------ | ----------------------------------- |
+| `name`        | 否     | 在 Web 面板中显示的名称             |
+| `secret`      | **是** | GitHub Webhook Secret，用于签名校验 |
+| `rules`       | **是** | 规则列表，至少一条                  |
+| `healthcheck` | 否     | 健康监控配置（见下）                |
+
+### 规则 `rules[]`
+
+| 字段       | 必填   | 说明                                           |
+| ---------- | ------ | ---------------------------------------------- |
+| `event`    | **是** | 事件类型，如 `push`、`pull_request`、`release` |
+| `branches` | **是** | 分支列表；空数组 `[]` 表示匹配所有分支         |
+| `actions`  | **是** | 操作列表，至少一项                             |
+
+### 操作 `actions[]`（当前支持 type: shell）
+
+| 字段         | 必填   | 说明                                |
+| ------------ | ------ | ----------------------------------- |
+| `type`       | **是** | 固定为 `shell`                      |
+| `command`    | **是** | 要执行的 Shell 命令                 |
+| `env`        | 否     | 环境变量列表，如 `["MY_VAR=hello"]` |
+| `timeout`    | 否     | 超时时间（秒），默认 300            |
+| `retryCount` | 否     | 失败后重试次数，默认 0              |
+| `retryDelay` | 否     | 重试间隔（秒），默认 0              |
+| `workDir`    | 否     | 命令工作目录，默认为程序所在目录    |
+
+### 健康监控 `healthcheck`（可选）
+
+| 字段       | 必填   | 说明                                                |
+| ---------- | ------ | --------------------------------------------------- |
+| `url`      | **是** | 要探测的地址（GET），5 秒超时；200/301/302 视为成功 |
+| `interval` | **是** | 探测间隔（秒）                                      |
+
+配置示例片段：
 
 ```yaml
 repos:
+  # 示例：配置一个仓库
   "your-username/your-repo":
-    secret: "your-github-webhook-secret"
+    # 在 Web 控制台展示的名称
+    name: "project name"
+    # GitHub Webhook Secret（在 GitHub 仓库设置中配置）
+    secret: "your-github-webhook-secret-here"
     rules:
+      # 规则1: 当 main 或 master 分支有 push 事件时触发
       - event: "push"
         branches: ["main", "master"]
         actions:
-          - type: "shell"
-            command: "cd /path/to/your/project && git pull && ./deploy.sh"
-```
+          - type: "shell" ## 必须，固定为 shell
+            command: "git pull && ./deploy.sh" ## 必须，要执行的 cmd 命令
+            env: ["MY_VAR=hello", "HTTP_PROXY=http://proxy:8080"] ## 非必须，环境变量，约等于一次性的 export
+            timeout: 300 ## 非必须，允许执行时间，默认 300，单位秒
+            retryCount: 0 ## 非必须，失败后重试次数，默认 0
+            retryDelay: 0 ## 非必须，失败后间隔多久进行重试，默认 0，单位秒
+            workDir: "/tmp" ## 非必须，命令工作目录，默认项目二进制文件目录
 
-### 3. 启动服务
-
-```bash
-./webhook-listener -port 9000 -config config.yaml
-```
-
-或使用默认配置：
-
-```bash
-./webhook-listener
-```
-
-默认端口为 `9000`，默认配置文件为 `config.yaml`。
-
----
-
-## 配置说明
-
-### 配置格式
-
-```yaml
-repos:
-  "仓库全名 (owner/repo)":
-    secret: "GitHub Webhook Secret"   # 必填，用于签名验证
-    rules:
-      - event: "push"                 # GitHub 事件类型
-        branches: ["main"]            # 分支列表（空数组表示所有分支）
+      # 规则2: 当任何分支有 pull_request 事件时触发
+      - event: "pull_request"
+        branches: [] # 空数组表示所有分支
         actions:
-          - type: "shell"             # 操作类型
-            command: "echo 'deploy'"  # Shell 命令
+          - type: "shell"
+            command: "echo 'Pull request event received'"
+
+    healthcheck: ## 非必须，健康监控，配置后可以进行健康监控
+      url: "https://example.com/health" ## 健康监控的地址，配置后会按照 interval 的间隔发起限时 5 秒的 GET 请求，200/301/302 视为成功
+      interval: 30 # 监控间隔，单位秒
 ```
-
-### 支持事件类型
-
-- ​`push`​
-- ​`pull_request`​
-- ​`release`​
-- 其他 GitHub Webhook 事件
-
-### 分支匹配规则
-
-- ​`branches` 为空或未填写：匹配所有分支
-- 指定了分支列表：仅匹配列表内的分支
 
 ---
 
@@ -109,172 +161,3 @@ repos:
 - **Content type**：`application/json`​
 - **Secret**：与配置文件一致
 - **Events**：根据需求选择，如 `push`​
-
----
-
-## API
-
-### POST /webhook
-
-接收 GitHub Webhook 请求。
-
-请求头：
-
-- ​`X-GitHub-Event`​
-- ​`X-Hub-Signature-256`​
-
-响应状态：
-
-- ​`200 OK`：处理成功
-- ​`400 Bad Request`：请求格式错误
-- ​`401 Unauthorized`：签名错误
-- ​`404 Not Found`：仓库未配置
-
-### GET /health
-
-健康检查接口。
-
-返回示例：
-
-```json
-{ "status": "ok" }
-```
-
----
-
-## 安全注意事项
-
-1. **Secret 安全**
-
-   - 不要提交包含真实 secret 的配置文件
-   - 建议使用环境变量或密钥管理工具
-   - 配置文件权限建议为 `600`​
-
-2. **Shell 执行安全**
-
-   - 不执行来源不明的命令
-   - 不拼接用户输入
-   - 可根据需要启用命令白名单机制
-
-3. **网络安全**
-
-   - 建议使用 Nginx 或 Caddy 配置 HTTPS
-   - 可通过防火墙限制来源 IP
-
-4. **权限控制**
-
-   - 使用最小权限运行服务
-   - 控制工作目录读写权限
-
----
-
-## 部署建议
-
-### 使用 systemd
-
-在 `/etc/systemd/system/webhook-listener.service` 中创建：
-
-```ini
-[Unit]
-Description=GitHub Webhook Listener
-After=network.target
-
-[Service]
-Type=simple
-User=your-user
-WorkingDirectory=/path/to/webhook-listener
-ExecStart=/path/to/webhook-listener -port 9000 -config /path/to/config.yaml
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-启用服务：
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable webhook-listener
-sudo systemctl start webhook-listener
-```
-
-### 使用 Nginx 反向代理
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location /webhook {
-        proxy_pass http://localhost:9000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /health {
-        proxy_pass http://localhost:9000;
-    }
-}
-```
-
----
-
-## 日志格式
-
-服务会输出结构化日志，包括事件、匹配规则、执行命令及耗时。
-
-示例：
-
-```
-[webhook] 仓库: owner/repo, 事件: push, 分支: main
-[webhook] 仓库 owner/repo 的规则匹配: event=push, branch=main
-[action] executing shell: cd /path && git pull
-[shell] 输出: Already up to date.
-[webhook] 请求处理完成，耗时: 1.234s
-```
-
----
-
-## 故障排查
-
-### 签名验证失败
-
-- 检查 secret 是否一致
-- 确认 GitHub 使用的是 `X-Hub-Signature-256`​
-
-### Shell 命令执行失败
-
-- 检查命令的权限、路径
-- 查看日志中的错误输出
-- 确认工作目录存在
-
-### 仓库未找到
-
-- 检查 `owner/repo` 名称是否准确
-- 注意大小写需与 GitHub 一致
-
----
-
-## 项目结构
-
-```
-.
-├── cmd/
-│   └── webhook-listener/
-│       └── main.go          # 入口文件
-├── internal/
-│   ├── actions/             # 操作执行
-│   │   ├── action.go
-│   │   └── shell.go
-│   ├── config/              # 配置管理
-│   │   └── config.go
-│   └── server/              # HTTP 服务器
-│       ├── handler.go
-│       └── signature.go
-├── config/
-│   └── config.example.yaml  # 配置示例
-└── README.md
-```
