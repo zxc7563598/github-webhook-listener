@@ -23,8 +23,10 @@
                         </div>
                         <div class="mt-4">
                             <div class="flex gap-1">
-                                <div class="h-2 flex-1 rounded" v-for="(history, index) in item.history" :key="index"
-                                    :class="historyEnums((history.success_count / history.total_count) * 100)"></div>
+                                <div class="h-2 flex-1 rounded cursor-pointer" v-for="(history, index) in item.history" :key="index"
+                                    :class="historyEnums((history.success_count / history.total_count) * 100)"
+                                    @mouseenter="showTooltip($event, history)" @mousemove="moveTooltip($event)"
+                                    @mouseleave="hideTooltip" />
                             </div>
                             <p class="text-xs text-white/60 mt-2">最近 24 小时可用率：{{ item.uptimePercentage }}%</p>
                         </div>
@@ -108,6 +110,31 @@
             </div>
         </div>
     </div>
+    <div v-if="tooltip.visible" class="fixed z-50 pointer-events-none" ref="tooltipEl" :style="{
+        left: tooltip.x + 'px',
+        top: tooltip.y + 'px'
+    }">
+        <div class="rounded-lg bg-black/90 border border-white/20
+           px-3 py-2 text-xs text-white shadow-xl">
+            <div class="font-mono">
+                时间: {{ tooltip.data.hour }}时
+            </div>
+            <div class="font-mono">
+                检查次数: {{ tooltip.data.total_count }}次
+            </div>
+            <div class="font-mono">
+                成功次数: {{ tooltip.data.success_count }}次
+            </div>
+            <div class="font-mono">
+                可用率: {{ Math.round(tooltip.data.success_count / tooltip.data.total_count * 100) }}%
+            </div>
+            <div class="font-mono">
+                平均响应: <span :class="averageResponseColor(tooltip.data.average_response)">{{
+                    tooltip.data.average_response }}ms</span>
+            </div>
+        </div>
+    </div>
+
 </template>
 
 <script setup>
@@ -193,6 +220,58 @@ const openLogModal = (id) => {
     }).finally(() => {
         loading.value = false
     });
+}
+
+const tooltipEl = ref(null)
+const tooltip = ref({
+    visible: false,
+    x: 0,
+    y: 0,
+    data: null,
+})
+
+const showTooltip = (e, history) => {
+    tooltip.value.visible = true
+    tooltip.value.data = history
+    moveTooltip(e)
+}
+
+const moveTooltip = (e) => {
+    const offset = 12
+    const el = tooltipEl.value
+    if (!el) return
+
+    const { width, height } = el.getBoundingClientRect()
+
+    let x = e.clientX + offset
+    let y = e.clientY + offset
+
+    // 右侧溢出，翻到左边
+    if (x + width > window.innerWidth) {
+        x = e.clientX - width - offset
+    }
+
+    // 下方溢出，翻到上面
+    if (y + height > window.innerHeight) {
+        y = e.clientY - height - offset
+    }
+
+    tooltip.value.x = x
+    tooltip.value.y = y
+}
+
+const hideTooltip = () => {
+    tooltip.value.visible = false
+}
+
+const averageResponseColor = (average_response) => {
+    if (average_response < 100) {
+        return "text-emerald-300"
+    } else if (average_response < 1000) {
+        return "text-yellow-300"
+    } else {
+        return "text-red-300"
+    }
 }
 
 onMounted(() => {
