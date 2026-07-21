@@ -18,13 +18,14 @@ import (
 func main() {
 	port := flag.Int("port", 9000, "服务器端口")
 	web := flag.Bool("web", false, "是否开启web")
+	workers := flag.Int("workers", 5, "Shell 任务最大并发数")
 	configPath := flag.String("config", "config.yaml", "配置文件路径")
 	webUser := flag.String("user", "", "Web UI Basic Auth 用户名")
 	webPass := flag.String("pass", "", "Web UI Basic Auth 密码")
 	flag.Parse()
 
 	// 初始化数据库
-	config.InitSQLiteDB()
+	db := config.InitSQLiteDB()
 
 	// 加载配置
 	cfg, err := config.LoadConfig(*configPath)
@@ -32,7 +33,7 @@ func main() {
 		log.Fatalf("未能加载配置: %v", err)
 	}
 
-	r, scheduler, healthMonitor := bootstrap.NewApp(web, cfg, webUser, webPass)
+	r, scheduler, healthMonitor := bootstrap.NewApp(db, *web, *workers, cfg, *webUser, *webPass)
 
 	addr := fmt.Sprintf(":%d", *port)
 	srv := &http.Server{

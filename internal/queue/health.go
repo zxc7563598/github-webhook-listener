@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/zxc7563598/github-webhook-listener/internal/config"
@@ -19,6 +20,7 @@ type HealthMonitor struct {
 	ctx     context.Context    // 上下文
 	cancel  context.CancelFunc // 取消函数
 	handler HealthResultHandler
+	wg      sync.WaitGroup // 等待组
 }
 
 func NewHealthMonitor(cfg *config.Config, handler HealthResultHandler) *HealthMonitor {
@@ -38,6 +40,7 @@ func (m *HealthMonitor) Start() error {
 	for reposName, repos := range m.cfg.Repos {
 		if repos.HealthCheck != nil {
 			healthCheck := repos.HealthCheck
+			m.wg.Add(1)
 			go m.runSiteChecker(m.ctx, reposName, healthCheck)
 		}
 	}
@@ -49,6 +52,7 @@ func (m *HealthMonitor) runSiteChecker(
 	reposName string,
 	hc *config.HealthCheckConfig,
 ) {
+	defer m.wg.Done()
 	if hc.Interval <= 0 {
 		log.Printf("[health] %s 未配置监听事件", reposName)
 		return
@@ -107,5 +111,6 @@ func (m *HealthMonitor) checkOnce(hc *config.HealthCheckConfig, reposName string
 func (m *HealthMonitor) Stop() {
 	log.Println("[health] 停止调度器...")
 	m.cancel()
+	m.wg.Wait()
 	log.Println("[health] 调度器已停止")
 }

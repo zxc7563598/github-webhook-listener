@@ -68,5 +68,5 @@ type WebhookLogDetails struct {
 }
 
 type GetWebhookLogDetailsRequest struct {
-	ID string `json:"id"`
+	ID string `json:"id" form:"id"`
 }

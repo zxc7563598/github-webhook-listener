@@ -12,7 +12,7 @@ import (
 	webhookHandler "github.com/zxc7563598/github-webhook-listener/internal/handler/webhook"
 )
 
-func Register(isWeb *bool, webUser, webPass *string, r *gin.Engine, webhookHandler *webhookHandler.Handler, healthHandler *healthHandler.Handler) *gin.Engine {
+func Register(isWeb bool, webUser, webPass string, r *gin.Engine, webhookHandler *webhookHandler.Handler, healthHandler *healthHandler.Handler) *gin.Engine {
 	r.RedirectTrailingSlash = false
 	r.RedirectFixedPath = false
 	// 中间件注册
@@ -21,11 +21,14 @@ func Register(isWeb *bool, webUser, webPass *string, r *gin.Engine, webhookHandl
 	r.GET("/", func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "若已开启web模式, 请访问 /web 页面")
 	})
+	r.GET("/healthz", func(ctx *gin.Context) {
+		ctx.String(http.StatusOK, "ok")
+	})
 	r.POST("/webhook", webhookHandler.MakeWebhookHandler)
-	r.POST("/api/overview", healthHandler.GetOverview)
-	r.POST("/api/webhook-log-details", healthHandler.GetWebhookLogDetails)
+	r.GET("/api/overview", healthHandler.GetOverview)
+	r.GET("/api/webhook-log-details", healthHandler.GetWebhookLogDetails)
 
-	if *isWeb {
+	if isWeb {
 		web := r.Group("/web")
 		web.Use(middleware.WebBasicAuth(webUser, webPass))
 		RegisterWeb(web)

@@ -29,26 +29,39 @@ func (s Service) MakeWebhookService(repoCfg *config.RepoConfig, branch string, e
 			}
 		}
 		log.Printf("[webhook] 仓库 %s 的规则匹配: event=%s, branch=%s", repoName, rule.Event, branch)
-		taskID, err := s.repo.WebhookLogCreate(
-			fmt.Sprintf("%s:%s", repoName, rule.Event),
-			rule.Actions[0].Command,
-			rule.Actions[0].WorkDir,
-			rule.Actions[0].Timeout,
-			rule.Actions[0].Env,
-		)
-		if err != nil {
-			log.Printf("[database] 创建数据失败:%v", err)
+
+		for _, action := range rule.Actions {
+			if action.Type != "shell" {
+				log.Printf("[webhook] 不支持的 action 类型: %s", action.Type)
+				continue
+			}
+			taskName := fmt.Sprintf("%s:%s", repoName, rule.Event)
+			taskID, err := s.repo.WebhookLogCreate(
+				taskName,
+				action.Command,
+				action.WorkDir,
+				action.Timeout,
+				action.Env,
+			)
+			if err != nil {
+				log.Printf("[database] 创建数据失败: %v", err)
+				return fmt.Errorf("创建任务日志失败: %w", err)
+			}
+			if s.dispatcher == nil {
+				log.Printf("[webhook] dispatcher 未初始化，无法调度任务")
+				return fmt.Errorf("dispatcher 未初始化")
+			}
+			s.dispatcher.AddTask(&queue.ShellTask{
+				ID:         taskID,
+				Name:       taskName,
+				Cmd:        action.Command,
+				Timeout:    time.Duration(action.Timeout) * time.Second,
+				RetryCount: action.RetryCount,
+				RetryDelay: time.Duration(action.RetryDelay) * time.Second,
+				Env:        action.Env,
+				WorkDir:    action.WorkDir,
+			})
 		}
-		s.dispatcher.AddTask(&queue.ShellTask{
-			ID:         taskID,
-			Name:       fmt.Sprintf("%s:%s", repoName, rule.Event),
-			Cmd:        rule.Actions[0].Command,
-			Timeout:    time.Duration(rule.Actions[0].Timeout) * time.Second,
-			RetryCount: rule.Actions[0].RetryCount,
-			RetryDelay: time.Duration(rule.Actions[0].RetryDelay) * time.Second,
-			Env:        rule.Actions[0].Env,
-			WorkDir:    rule.Actions[0].WorkDir,
-		})
 	}
 	return nil
 }

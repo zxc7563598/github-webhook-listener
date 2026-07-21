@@ -205,8 +205,8 @@ const openLogModal = (id) => {
     logModal.value = true
     httpRequest({
         url: config.interface.GetWebhookLogDetails,
-        method: 'post',
-        data: {
+        method: 'get',
+        params: {
             id: id
         }
     }).then(res => {
@@ -278,8 +278,8 @@ onMounted(() => {
     loading.value = true
     httpRequest({
         url: config.interface.GetOverview,
-        method: 'post',
-        data: {}
+        method: 'get',
+        params: {}
     }).then(res => {
         if (res.code == 200 && res.success) {
             panelData.value = res.data

@@ -19,8 +19,8 @@ func (h *Handler) GetOverview(ctx *gin.Context) {
 
 func (h *Handler) GetWebhookLogDetails(ctx *gin.Context) {
 	var req healthDTO.GetWebhookLogDetailsRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, dto.Error(http.StatusBadRequest, "请求参数异常", nil))
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.Error(http.StatusBadRequest, "请求参数异常", nil))
 		return
 	}
 	result, err := h.svc.GetWebhookLogDetails(req.ID)

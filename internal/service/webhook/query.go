@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	webhookDTO "github.com/zxc7563598/github-webhook-listener/internal/dto/webhook"
@@ -58,11 +59,13 @@ func (s Service) QueryWebhookLogDetails(id string) (*webhookDTO.WebhookLogDetail
 	if row.StdoutPath != nil {
 		stdout, err = utils.ReadLogFile(*row.StdoutPath)
 		if err != nil {
+			log.Printf("[webhook] 读取 stdout 日志失败: %v", err)
 		}
 	}
 	if row.StderrPath != nil {
 		stderr, err = utils.ReadLogFile(*row.StderrPath)
 		if err != nil {
+			log.Printf("[webhook] 读取 stderr 日志失败: %v", err)
 		}
 	}
 	return &webhookDTO.WebhookLogDetails{

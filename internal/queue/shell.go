@@ -54,17 +54,16 @@ type ShellTaskResult struct {
 
 // Scheduler 调度器
 type ShellScheduler struct {
-	maxWorkers      int                         // 最大并发数
-	tasks           map[string]*ShellTask       // 所有任务
-	taskResults     map[string]*ShellTaskResult // 所有任务结果
-	taskQueue       chan *ShellTask             // 任务队列
-	taskResultQueue chan *ShellTaskResult       // 结果队列
-	wg              sync.WaitGroup              // 等待组
-	mu              sync.Mutex                  // 读写锁
-	ctx             context.Context             // 上下文
-	cancel          context.CancelFunc          // 取消函数
-	isRunning       bool                        // 是否正在运行
-	completedTasks  map[string]bool             // 已完成任务
+	maxWorkers      int                   // 最大并发数
+	tasks           map[string]*ShellTask // 所有任务
+	taskQueue       chan *ShellTask       // 任务队列
+	taskResultQueue chan *ShellTaskResult // 结果队列
+	workerWg        sync.WaitGroup        // worker 等待组
+	processorWg     sync.WaitGroup        // resultProcessor 等待组
+	mu              sync.Mutex            // 读写锁
+	ctx             context.Context       // 上下文
+	cancel          context.CancelFunc    // 取消函数
+	isRunning       bool                  // 是否正在运行
 	resultHandler   ShellTaskResultHandler
 }
 
@@ -74,12 +73,10 @@ func NewShellScheduler(maxWorkers int, handler ShellTaskResultHandler) *ShellSch
 	return &ShellScheduler{
 		maxWorkers:      maxWorkers,
 		tasks:           make(map[string]*ShellTask),
-		taskResults:     make(map[string]*ShellTaskResult),
 		taskQueue:       make(chan *ShellTask, 100),
 		taskResultQueue: make(chan *ShellTaskResult, 100),
 		ctx:             ctx,
 		cancel:          cancel,
-		completedTasks:  make(map[string]bool),
 		resultHandler:   handler,
 	}
 }
@@ -98,12 +95,17 @@ func (s *ShellScheduler) AddTask(task *ShellTask) error {
 		task.Timeout = 300 * time.Second
 	}
 	s.tasks[task.ID] = task
-	s.taskQueue <- task
-	return nil
+	select {
+	case s.taskQueue <- task:
+		return nil
+	default:
+		delete(s.tasks, task.ID)
+		return fmt.Errorf("任务队列已满，无法添加任务: %s", task.Name)
+	}
 }
 
 // copyAndLogToFile 复制并同时写入文件
-func (s *ShellScheduler) copyAndLogToFile(dst io.Writer, src io.Reader, taskName, filePath string) error {
+func copyAndLogToFile(dst io.Writer, src io.Reader, taskName, filePath string) error {
 	// 创建或打开文件
 	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -176,11 +178,11 @@ func (s *ShellScheduler) runCommand(task *ShellTask, output io.Writer, stdoutLog
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		s.copyAndLogToFile(output, stdoutPipe, task.Name, stdoutLogPath)
+		copyAndLogToFile(output, stdoutPipe, task.Name, stdoutLogPath)
 	}()
 	go func() {
 		defer wg.Done()
-		s.copyAndLogToFile(output, stderrPipe, task.Name, stderrLogPath)
+		copyAndLogToFile(output, stderrPipe, task.Name, stderrLogPath)
 	}()
 	wg.Wait()
 
@@ -254,7 +256,7 @@ func (s *ShellScheduler) executeTask(workerID int, task *ShellTask) *ShellTaskRe
 
 // worker 工作协程
 func (s *ShellScheduler) worker(id int) {
-	defer s.wg.Done()
+	defer s.workerWg.Done()
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -268,11 +270,8 @@ func (s *ShellScheduler) worker(id int) {
 
 // resultProcessor 处理任务结果
 func (s *ShellScheduler) resultProcessor() {
+	defer s.processorWg.Done()
 	for result := range s.taskResultQueue {
-		s.mu.Lock()
-		s.taskResults[result.TaskID] = result
-		s.completedTasks[result.TaskID] = true
-		s.mu.Unlock()
 		// 记录运行信息
 		var errMsg string
 		if result.Error != nil {
@@ -294,14 +293,12 @@ func (s *ShellScheduler) resultProcessor() {
 			}
 		}
 		// 打印结果
-		fmt.Printf("[queue] 任务完成: %s (%s)\n", result.TaskName, result.TaskID)
-		fmt.Printf("  状态: %s", result.Status)
-		fmt.Printf("  耗时: %v", result.Duration)
-		fmt.Printf("  开始: %s", result.StartTime.Format(time.DateTime))
-		fmt.Printf("  结束: %s", result.EndTime.Format(time.DateTime))
-		fmt.Printf("  退出码: %d", result.ExitCode)
-		fmt.Printf("  错误信息: %v", result.Error)
-		fmt.Printf("  重试次数: %d", result.RetryCount)
+		log.Printf("[queue] 任务完成: %s (%s) 状态: %s 耗时: %v 开始: %s 结束: %s 退出码: %d 错误信息: %v 重试次数: %d",
+			result.TaskName, result.TaskID,
+			result.Status, result.Duration,
+			result.StartTime.Format(time.DateTime), result.EndTime.Format(time.DateTime),
+			result.ExitCode, result.Error, result.RetryCount,
+		)
 	}
 }
 
@@ -322,13 +319,14 @@ func (s *ShellScheduler) Start() error {
 	s.isRunning = true
 	s.mu.Unlock()
 
-	// 启动work
+	// 启动worker
 	for i := 0; i < s.maxWorkers; i++ {
-		s.wg.Add(1)
+		s.workerWg.Add(1)
 		go s.worker(i)
 	}
 
 	// 启动结果处理器
+	s.processorWg.Add(1)
 	go s.resultProcessor()
 
 	log.Printf("[queue] 调度器启动，最大并发数: %d", s.maxWorkers)
@@ -338,10 +336,11 @@ func (s *ShellScheduler) Start() error {
 // Stop 停止调度器
 func (s *ShellScheduler) Stop() {
 	log.Println("[queue] 停止调度器...")
-	s.cancel()
-	s.wg.Wait()
-	close(s.taskQueue)
-	close(s.taskResultQueue)
+	s.cancel()              // 1. 通知所有 worker 停止
+	s.workerWg.Wait()       // 2. 等待所有 worker 退出（不再往 taskResultQueue 发送）
+	close(s.taskResultQueue) // 3. 关闭结果队列，让 resultProcessor 的 range 循环退出
+	s.processorWg.Wait()     // 4. 等待 resultProcessor 退出
+	close(s.taskQueue)       // 5. 安全关闭任务队列
 	s.isRunning = false
 	log.Println("[queue] 调度器已停止")
 }

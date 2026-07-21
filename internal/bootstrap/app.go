@@ -11,19 +11,20 @@ import (
 	webhookRepo "github.com/zxc7563598/github-webhook-listener/internal/repository/webhook"
 	healthSvc "github.com/zxc7563598/github-webhook-listener/internal/service/health"
 	webhookSvc "github.com/zxc7563598/github-webhook-listener/internal/service/webhook"
+	"gorm.io/gorm"
 )
 
-func NewApp(isWeb *bool, cfg *config.Config, webUser, webPass *string) (*gin.Engine, *queue.ShellScheduler, *queue.HealthMonitor) {
+func NewApp(db *gorm.DB, isWeb bool, maxWorkers int, cfg *config.Config, webUser, webPass string) (*gin.Engine, *queue.ShellScheduler, *queue.HealthMonitor) {
 	// repository
-	webhookRepo := webhookRepo.New(config.DB)
-	healthRepo := healthRepo.New(config.DB)
+	webhookRepo := webhookRepo.New(db)
+	healthRepo := healthRepo.New(db)
 
 	// service
 	webhookSvc := webhookSvc.New(webhookRepo)
 	healthSvc := healthSvc.New(healthRepo, webhookSvc)
 
 	// queue（注入 service 作为结果处理者）
-	scheduler := queue.NewShellScheduler(5, webhookSvc)
+	scheduler := queue.NewShellScheduler(maxWorkers, webhookSvc)
 	scheduler.Start()
 
 	healthMonitor := queue.NewHealthMonitor(cfg, healthSvc)
