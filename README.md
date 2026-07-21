@@ -5,170 +5,208 @@
   <hr width="50%"/>
 </div>
 
-A lightweight Go service for receiving GitHub Webhooks and executing Shell commands. It includes an optional built-in web panel for viewing project status, webhook execution logs, and health check results.
-
-**This project has been parsed by Zread. If you need a quick overview of the project, you can click here to view it：[Understand this project](https://zread.ai/zxc7563598/github-webhook-listener)**
+A lightweight Go service for receiving GitHub Webhooks and executing Shell commands. Includes an optional built-in Web dashboard with project health monitoring and webhook execution logs.
 
 | <img src="https://raw.githubusercontent.com/zxc7563598/github-webhook-listener/main/demo/00001.png"> | <img src="https://raw.githubusercontent.com/zxc7563598/github-webhook-listener/main/demo/00002.png"> | <img src="https://raw.githubusercontent.com/zxc7563598/github-webhook-listener/main/demo/00003.png"> |
 | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| -                                                                                                    | -                                                                                                    | -                                                                                                    |
 
 ## Features
 
-- ​**Webhook Receiver**​: Handles GitHub events such as `push`​, `pull_request`​, `release`, etc.
-- ​**Rule Matching**: Configure different rules based on event types and branches to trigger corresponding Shell commands
-- ​**Web Panel**: Optional web UI to view runtime overview, webhook logs, and health check status (supports Basic Auth)
-- ​**Health Checks**: Optionally configure a URL and interval per repository to periodically probe and record service status
+- **Webhook Receiver**: Handles GitHub events such as `push`, `pull_request`, `release`, with HMAC-SHA256 signature verification
+- **Rule Matching**: Flexible rules by event type and branch, triggering Shell commands with optional retry on failure
+- **Web Dashboard**: Optional dashboard (with Basic Auth) for viewing project health status, 24-hour uptime charts, and webhook execution logs
+- **Health Monitoring**: Per-repository scheduled HTTP probes with status tracking
+- **Single Binary**: Compiled as a standalone Go executable with embedded SQLite — no external database required
 
----
+## Quick Start
 
-## Deployment
+### 1. Get the binary
 
-### Option 1: Use Prebuilt Releases (Recommended)
-
-Download the binary for your platform from [Releases](https://github.com/zxc7563598/github-webhook-listener/releases), extract it, and run it using the startup commands below.
-
-### Option 2: Build and Run Locally
-
-Requires Go installed locally, and Node.js if you want to build the Web UI.
-
-| Command               | Description                                                 |
-| --------------------- | ----------------------------------------------------------- |
-| ​`make build`         | Build the executable for the current platform into`bin/`    |
-| ​`make run`           | Run using`config.yaml`in the project root (Web UI disabled) |
-| ​`make web`           | Same as above, but with the Web UI enabled                  |
-| ​`make build-linux`   | Build Linux amd64 (will run`make build-web`first)           |
-| ​`make build-darwin`  | Build macOS amd64/arm64                                     |
-| ​`make build-windows` | Build Windows amd64                                         |
-| ​`make build-all`     | Build for all platforms above                               |
-| ​`make build-web`     | Build frontend only and copy to`internal/webui/dist`        |
-| ​`make clean`         | Clean build artifacts                                       |
-
----
-
-## Startup
-
-**Before running, copy** **​`config/config.example.yaml`​**​ **to** **​`config.yaml`​**​ **in the project root and modify it as needed (see configuration details below).**
+Download the binary for your platform from [Releases](https://github.com/zxc7563598/github-webhook-listener/releases), or build locally:
 
 ```bash
-./webhook-listener [options]
+make build          # Build to bin/ (current platform)
+make build-linux    # Linux amd64
+make build-darwin   # macOS amd64 + arm64
+make build-windows  # Windows amd64
 ```
 
-| Option     | Default     | Description                                                       |
-| ---------- | ----------- | ----------------------------------------------------------------- |
-| ​`-port`   | 9000        | HTTP service listening port                                       |
-| ​`-config` | config.yaml | Path to configuration file                                        |
-| ​`-web`    | false       | Enable Web UI (accessible at`/web`)                               |
-| ​`-user`   | (empty)     | Basic Auth username for Web UI (recommended when`-web`is enabled) |
-| ​`-pass`   | (empty)     | Basic Auth password for Web UI                                    |
+> [!NOTE]
+> Local builds require Go 1.22+. Cross-compilation or Web dashboard features also require Node.js (for building the frontend).
 
-**Examples:**
+### 2. Create the config file
 
 ```bash
-# Webhook only, port 9000, using config.yaml in current directory
-./webhook-listener -config config.yaml -port 9000
-
-# Enable Web UI with Basic Auth
-./webhook-listener -config config.yaml -port 9000 -web -user admin -pass your-password
+cp config/config.example.yaml config.yaml
 ```
 
-Set the GitHub Webhook callback URL to: ​`http(s)://your-domain-or-ip:port/webhook`​(e.g. `https://example.com:9000/webhook`)
-
----
-
-## Configuration
-
-The configuration file uses YAML format. See `config/config.example.yaml` for reference. High-level structure:
-
-### Top Level: `repos`
-
-- key: Full repository name in the format `owner/repo`​ (e.g. `your-username/your-repo`)
-- value: Configuration object for that repository
-
----
-
-### Repository Configuration
-
-| Field          | Required | Description                                    |
-| -------------- | -------- | ---------------------------------------------- |
-| ​`name`        | No       | Display name shown in the Web UI               |
-| ​`secret`      | **Yes**  | GitHub Webhook Secret for signature validation |
-| ​`rules`       | **Yes**  | List of rules, at least one required           |
-| ​`healthcheck` | No       | Health check configuration (see below)         |
-
-### Rules `rules[]`
-
-| Field       | Required | Description                                           |
-| ----------- | -------- | ----------------------------------------------------- |
-| ​`event`    | **Yes**  | Event type, such as`push`​,`pull_request`​,`release`  |
-| ​`branches` | **Yes**  | List of branches; empty array`[]`matches all branches |
-| ​`actions`  | **Yes**  | List of actions, at least one required                |
-
-### Actions `actions[]`​ (currently supports `type: shell`)
-
-| Field         | Required | Description                                                          |
-| ------------- | -------- | -------------------------------------------------------------------- |
-| ​`type`       | **Yes**  | Must be`shell`                                                       |
-| ​`command`    | **Yes**  | Shell command to execute                                             |
-| ​`env`        | No       | Environment variables, e.g.`["MY_VAR=hello"]`                        |
-| ​`timeout`    | No       | Timeout in seconds, default is 300                                   |
-| ​`retryCount` | No       | Number of retries on failure, default is 0                           |
-| ​`retryDelay` | No       | Delay between retries (seconds), default is 0                        |
-| ​`workDir`    | No       | Working directory for the command; defaults to the program directory |
-
-### Health Check `healthcheck` (Optional)
-
-| Field       | Required | Description                                                                      |
-| ----------- | -------- | -------------------------------------------------------------------------------- |
-| ​`url`      | **Yes**  | URL to probe via GET with a 5-second timeout; 200/301/302 are considered healthy |
-| ​`interval` | **Yes**  | Probe interval in seconds                                                        |
-
-Example configuration snippet:
+Edit `config.yaml` with your repository and Webhook Secret. For full details see [config/config.example.yaml](config/config.example.yaml). Here's a minimal example:
 
 ```yaml
 repos:
-  # Example repository configuration
   "your-username/your-repo":
-    # Display name in the Web UI
-    name: "project name"
-    # GitHub Webhook Secret (configured in repository settings)
-    secret: "your-github-webhook-secret-here"
+    secret: "your-webhook-secret"
     rules:
-      # Rule 1: Trigger on push events to main or master
       - event: "push"
-        branches: ["main", "master"]
-        actions:
-          - type: "shell" ## Required, must be shell
-            command: "git pull && ./deploy.sh" ## Required, shell command to execute
-            env: ["MY_VAR=hello", "HTTP_PROXY=http://proxy:8080"] ## Optional, environment variables (similar to one-time exports)
-            timeout: 300 ## Optional, execution timeout in seconds (default 300)
-            retryCount: 0 ## Optional, retry count on failure (default 0)
-            retryDelay: 0 ## Optional, delay between retries in seconds (default 0)
-            workDir: "/tmp" ## Optional, working directory (default: binary directory)
-
-      # Rule 2: Trigger on pull_request events for any branch
-      - event: "pull_request"
-        branches: [] # Empty array matches all branches
+        branches:
+          - main
         actions:
           - type: "shell"
-            command: "echo 'Pull request event received'"
-
-    healthcheck: ## Optional health check
-      url: "https://example.com/health" ## A GET request will be sent every interval with a 5s timeout; 200/301/302 are considered healthy
-      interval: 30 # Interval in seconds
+            command: "git pull && ./deploy.sh"
 ```
 
----
+### 3. Start the service
 
-## GitHub Webhook Setup Guide
+```bash
+./webhook-listener -config config.yaml -port 9000
+```
 
-In your GitHub repository, go to:
+If you don't need the Web dashboard, you're done. Set your GitHub Webhook URL to `http://your-server:9000/webhook`.
 
-​`Settings → Webhooks → Add webhook`
+To enable the dashboard, add the `-web` flag:
 
-Configuration:
+```bash
+./webhook-listener -config config.yaml -port 9000 -web -user admin -pass your-password
+```
 
-- ​**Payload URL**​: `http://your-server:9000/webhook`
-- ​**Content type**​: `application/json`
-- ​**Secret**: Same value as in the configuration file
-- ​**Events**​: Select as needed, e.g. `push`
+Then visit `http://your-server:9000/web`.
+
+## CLI Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `-port` | `9000` | HTTP server port |
+| `-config` | `config.yaml` | Path to configuration file |
+| `-web` | `false` | Enable Web dashboard (at `/web`) |
+| `-user` | (empty) | Basic Auth username for Web dashboard |
+| `-pass` | (empty) | Basic Auth password for Web dashboard |
+| `-workers` | `5` | Maximum concurrent Shell task workers |
+
+## Configuration
+
+For the full configuration format and examples covering three typical use cases, see **[config/config.example.yaml](config/config.example.yaml)**. Below is a field reference.
+
+### Repo Config
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `name` | No | Display name in the Web dashboard. Defaults to the repository full name |
+| `secret` | **Yes** | GitHub Webhook Secret for HMAC-SHA256 signature verification |
+| `rules` | **Yes** | List of trigger rules, at least one required |
+| `healthcheck` | No | Health check configuration |
+
+### Rule Config
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `event` | **Yes** | GitHub event type (`push`, `pull_request`, `release`, etc.) |
+| `branches` | **Yes** | List of branches to match. Empty list `[]` matches all branches |
+| `actions` | **Yes** | Actions to execute on match, at least one required |
+
+### Action Config (type: shell)
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `type` | **Yes** | Must be `shell` |
+| `command` | **Yes** | Shell command to execute. Multi-line text is supported |
+| `env` | No | Environment variables, format: `["KEY=VALUE", ...]` |
+| `timeout` | No | Timeout in seconds, default `300` |
+| `retryCount` | No | Number of retries on failure, default `0` |
+| `retryDelay` | No | Seconds between retries, default `0` |
+| `workDir` | No | Working directory, defaults to the program's directory |
+
+### Healthcheck Config
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `url` | **Yes** | URL to probe. The service sends periodic GET requests with a 5-second timeout |
+| `interval` | **Yes** | Probe interval in seconds |
+
+> [!NOTE]
+> HTTP status codes 200, 301, and 302 are considered healthy. All other status codes or connection failures are treated as unhealthy.
+
+## GitHub Webhook Setup
+
+In your GitHub repository, go to **Settings → Webhooks → Add webhook**:
+
+| Field | Value |
+| --- | --- |
+| Payload URL | `http://your-server:9000/webhook` |
+| Content type | `application/json` |
+| Secret | Must match the `secret` field in your config file |
+| Events | Select as needed (e.g. `push`, `pull_request`) |
+
+## Web Dashboard
+
+Enabled with the `-web` flag. Access at `/web`. Features:
+
+- **Overview**: Total projects, healthy/unhealthy counts
+- **Project Cards**: Latest health status, 24-hour uptime bar chart for each project (hover for details)
+- **Deployment Logs**: Last 10 webhook execution records, click to view stdout/stderr output
+
+### Authentication
+
+Basic Auth is recommended:
+
+```bash
+./webhook-listener -web -user admin -pass your-password
+```
+
+Without credentials configured, the dashboard is accessible without authentication.
+
+### Health Check Endpoint
+
+`GET /healthz` returns `200 OK`. Useful for upstream load balancers or external monitoring tools.
+
+## Tech Stack
+
+| Layer | Technology |
+| --- | --- |
+| Backend | Go + [Gin](https://github.com/gin-gonic/gin) + [GORM](https://gorm.io/) |
+| Database | SQLite (pure-Go driver, zero external dependencies) |
+| Frontend | Vue 3 + [Vite](https://vitejs.dev/) + [Tailwind CSS](https://tailwindcss.com/) |
+| Config | YAML |
+
+## Directory Structure
+
+```
+├── cmd/webhook-listener/main.go   # Entry point
+├── config/
+│   └── config.example.yaml        # Configuration template
+├── internal/
+│   ├── bootstrap/app.go           # Dependency injection & wiring
+│   ├── config/                    # Config parsing, SQLite initialization
+│   ├── handler/                   # HTTP routes & request handling
+│   ├── middleware/                # Basic Auth middleware
+│   ├── model/                     # GORM models
+│   ├── queue/                     # Shell task scheduler, health monitor
+│   ├── repository/                # Data access layer
+│   ├── service/                   # Business logic layer
+│   └── webui/embed.go             # Embedded frontend assets
+├── pkg/utils/                     # Utilities (signature, log paths)
+├── web/                           # Vue 3 frontend source
+└── Makefile
+```
+
+## Local Development
+
+```bash
+# Backend
+go run ./cmd/webhook-listener -config config/config.example.yaml
+
+# Frontend (dev mode with HMR)
+cd web && npm install && npm run dev
+
+# Build frontend & cross-compile
+make build-all
+```
+
+`make build-web` copies `web/dist/` to `internal/webui/dist/`, so the frontend is embedded into the Go binary.
+
+## Notes
+
+- **Network access**: GitHub must be able to reach your `/webhook` endpoint. Make sure your firewall/security group allows the port
+- **Signature verification**: The `secret` in your config must match the one in GitHub Webhook settings, or requests will be rejected with HTTP 403
+- **HTTPS**: In production, use Nginx/Caddy as a reverse proxy with HTTPS. GitHub displays security warnings for plaintext webhooks
+- **Log persistence**: Shell command stdout/stderr are stored under `logs/shell/` in the executable's directory, organized by date
+- **SQLite concurrency**: WAL mode is enabled by default, handling concurrent writes well for typical workloads. For extremely high-frequency webhook scenarios, consider migrating to PostgreSQL

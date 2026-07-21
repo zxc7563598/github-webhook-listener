@@ -5,170 +5,208 @@
   <hr width="50%"/>
 </div>
 
-用于接收 GitHub Webhook 并执行 Shell 命令的轻量级 Go 服务，内置 Web 面板可查看项目运行状态与 Webhook 执行记录。
-
-**本项目已经经由 Zread 解析完成，如果需要快速了解项目，可以点击此处进行查看：[了解本项目](https://zread.ai/zxc7563598/github-webhook-listener)**
+用于接收 GitHub Webhook 并执行 Shell 命令的轻量级 Go 服务。内置可选的 Web 面板，支持项目健康监控与 Webhook 执行记录查看。
 
 | <img src="https://raw.githubusercontent.com/zxc7563598/github-webhook-listener/main/demo/00001.png"> | <img src="https://raw.githubusercontent.com/zxc7563598/github-webhook-listener/main/demo/00002.png"> | <img src="https://raw.githubusercontent.com/zxc7563598/github-webhook-listener/main/demo/00003.png"> |
 | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| -                                                                                                    | -                                                                                                    | -                                                                                                    |
 
 ## 功能特性
 
-- **Webhook 接收**：接收 GitHub 的 push、pull_request、release 等事件
-- **规则匹配**：按事件类型、分支配置不同规则，触发对应 Shell 命令
-- **Web 面板**：可选开启，查看运行概览、Webhook 日志、健康监控状态（支持 Basic Auth）
-- **健康监控**：可选为每个仓库配置 URL 与间隔，定时探测并记录状态
+- **Webhook 接收**：接收 GitHub 的 push、pull_request、release 等事件，通过 HMAC-SHA256 签名校验
+- **规则匹配**：按事件类型、分支灵活配置规则，匹配后自动执行对应 Shell 命令，支持失败重试
+- **Web 面板**：可选开启的仪表盘（支持 Basic Auth），查看项目健康状态、24 小时可用率图表、Webhook 执行日志
+- **健康监控**：为每个仓库配置定时 HTTP 探测，状态异常一目了然
+- **单二进制部署**：Go 编译为单个可执行文件，内置 SQLite，无需外部数据库依赖
 
----
+## 快速开始
 
-## 部署方式
+### 1. 获取可执行文件
 
-### 方式一：使用 Releases 预构建（推荐）
-
-在 [Releases](https://github.com/zxc7563598/github-webhook-listener/releases) 下载对应平台的二进制，解压后按下方「启动命令」运行即可。
-
-### 方式二：本地构建与运行
-
-需要本地安装 Go 与（若需 Web 面板）Node.js。
-
-| 命令                 | 说明                                            |
-| -------------------- | ----------------------------------------------- |
-| `make build`         | 构建当前平台可执行文件到 `bin/`                 |
-| `make run`           | 使用项目根目录 `config.yaml` 运行（不开启 Web） |
-| `make web`           | 同上，并开启 Web 面板                           |
-| `make build-linux`   | 构建 Linux amd64（会先执行 `make build-web`）   |
-| `make build-darwin`  | 构建 macOS amd64/arm64                          |
-| `make build-windows` | 构建 Windows amd64                              |
-| `make build-all`     | 构建上述所有平台                                |
-| `make build-web`     | 仅构建前端并拷贝到 `internal/webui/dist`        |
-| `make clean`         | 清理构建产物                                    |
-
----
-
-## 启动命令
-
-**运行前需将 `config/config.example.yaml` 复制为项目根目录下的 `config.yaml` 并按要求修改（见下方配置说明）。**
+从 [Releases](https://github.com/zxc7563598/github-webhook-listener/releases) 下载对应平台的二进制，或本地构建：
 
 ```bash
-./webhook-listener [选项]
+make build          # 构建到 bin/
+make build-linux    # Linux amd64
+make build-darwin   # macOS amd64 + arm64
+make build-windows  # Windows amd64
 ```
 
-| 参数      | 默认值      | 说明                                                 |
-| --------- | ----------- | ---------------------------------------------------- |
-| `-port`   | 9000        | HTTP 服务监听端口                                    |
-| `-config` | config.yaml | 配置文件路径                                         |
-| `-web`    | false       | 是否开启 Web 面板（访问 `/web`）                     |
-| `-user`   | （空）      | Web 面板 Basic Auth 用户名（开启 `-web` 时建议设置） |
-| `-pass`   | （空）      | Web 面板 Basic Auth 密码                             |
+> [!NOTE]
+> 本地构建需要 Go 1.22+。交叉编译或 Web 面板功能还需 Node.js（用于构建前端）。
 
-**示例：**
+### 2. 创建配置文件
 
 ```bash
-# 仅 Webhook，端口 9000，使用当前目录 config.yaml
-./webhook-listener -config config.yaml -port 9000
-
-# 开启 Web 面板，并设置 Basic Auth
-./webhook-listener -config config.yaml -port 9000 -web -user admin -pass your-password
+cp config/config.example.yaml config.yaml
 ```
 
-GitHub Webhook 回调地址填写：`http(s)://你的域名或IP:端口/webhook`（例如 `https://example.com:9000/webhook`）。
-
----
-
-## 配置文件说明
-
-配置文件为 YAML，参考 `config/config.example.yaml`。结构概览如下。
-
-### 顶层：`repos`
-
-- key：仓库全名，格式 `owner/repo`（如 `your-username/your-repo`）
-- value：该仓库的配置对象
-
----
-
-### 每个仓库的配置
-
-| 字段          | 必填   | 说明                                |
-| ------------- | ------ | ----------------------------------- |
-| `name`        | 否     | 在 Web 面板中显示的名称             |
-| `secret`      | **是** | GitHub Webhook Secret，用于签名校验 |
-| `rules`       | **是** | 规则列表，至少一条                  |
-| `healthcheck` | 否     | 健康监控配置（见下）                |
-
-### 规则 `rules[]`
-
-| 字段       | 必填   | 说明                                           |
-| ---------- | ------ | ---------------------------------------------- |
-| `event`    | **是** | 事件类型，如 `push`、`pull_request`、`release` |
-| `branches` | **是** | 分支列表；空数组 `[]` 表示匹配所有分支         |
-| `actions`  | **是** | 操作列表，至少一项                             |
-
-### 操作 `actions[]`（当前支持 type: shell）
-
-| 字段         | 必填   | 说明                                |
-| ------------ | ------ | ----------------------------------- |
-| `type`       | **是** | 固定为 `shell`                      |
-| `command`    | **是** | 要执行的 Shell 命令                 |
-| `env`        | 否     | 环境变量列表，如 `["MY_VAR=hello"]` |
-| `timeout`    | 否     | 超时时间（秒），默认 300            |
-| `retryCount` | 否     | 失败后重试次数，默认 0              |
-| `retryDelay` | 否     | 重试间隔（秒），默认 0              |
-| `workDir`    | 否     | 命令工作目录，默认为程序所在目录    |
-
-### 健康监控 `healthcheck`（可选）
-
-| 字段       | 必填   | 说明                                                |
-| ---------- | ------ | --------------------------------------------------- |
-| `url`      | **是** | 要探测的地址（GET），5 秒超时；200/301/302 视为成功 |
-| `interval` | **是** | 探测间隔（秒）                                      |
-
-配置示例片段：
+编辑 `config.yaml`，填入你的仓库和 Webhook Secret。完整说明见 [config/config.example.yaml](config/config.example.yaml)，这里是一个最简示例：
 
 ```yaml
 repos:
-  # 示例：配置一个仓库
   "your-username/your-repo":
-    # 在 Web 控制台展示的名称
-    name: "project name"
-    # GitHub Webhook Secret（在 GitHub 仓库设置中配置）
-    secret: "your-github-webhook-secret-here"
+    secret: "your-webhook-secret"
     rules:
-      # 规则1: 当 main 或 master 分支有 push 事件时触发
       - event: "push"
-        branches: ["main", "master"]
-        actions:
-          - type: "shell" ## 必须，固定为 shell
-            command: "git pull && ./deploy.sh" ## 必须，要执行的 cmd 命令
-            env: ["MY_VAR=hello", "HTTP_PROXY=http://proxy:8080"] ## 非必须，环境变量，约等于一次性的 export
-            timeout: 300 ## 非必须，允许执行时间，默认 300，单位秒
-            retryCount: 0 ## 非必须，失败后重试次数，默认 0
-            retryDelay: 0 ## 非必须，失败后间隔多久进行重试，默认 0，单位秒
-            workDir: "/tmp" ## 非必须，命令工作目录，默认项目二进制文件目录
-
-      # 规则2: 当任何分支有 pull_request 事件时触发
-      - event: "pull_request"
-        branches: [] # 空数组表示所有分支
+        branches:
+          - main
         actions:
           - type: "shell"
-            command: "echo 'Pull request event received'"
-
-    healthcheck: ## 非必须，健康监控，配置后可以进行健康监控
-      url: "https://example.com/health" ## 健康监控的地址，配置后会按照 interval 的间隔发起限时 5 秒的 GET 请求，200/301/302 视为成功
-      interval: 30 # 监控间隔，单位秒
+            command: "git pull && ./deploy.sh"
 ```
 
----
+### 3. 启动服务
 
-## GitHub Webhook 配置指南
+```bash
+./webhook-listener -config config.yaml -port 9000
+```
 
-在仓库中进入：
+如果不需要 Web 面板，到这里就可以用了。GitHub Webhook 地址填 `http://你的服务器:9000/webhook`。
 
-​`Settings → Webhooks → Add webhook`​
+需要仪表盘的，加 `-web` 参数：
 
-配置内容：
+```bash
+./webhook-listener -config config.yaml -port 9000 -web -user admin -pass your-password
+```
 
-- **Payload URL**：`http://your-server:9000/webhook`​
-- **Content type**：`application/json`​
-- **Secret**：与配置文件一致
-- **Events**：根据需求选择，如 `push`​
+然后访问 `http://你的服务器:9000/web`。
+
+## 启动参数
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `-port` | `9000` | HTTP 服务监听端口 |
+| `-config` | `config.yaml` | 配置文件路径 |
+| `-web` | `false` | 开启 Web 面板（访问 `/web`） |
+| `-user` | （空） | Web 面板 Basic Auth 用户名 |
+| `-pass` | （空） | Web 面板 Basic Auth 密码 |
+| `-workers` | `5` | Shell 任务最大并发执行数 |
+
+## 配置文件
+
+配置文件格式和完整示例见 **[config/config.example.yaml](config/config.example.yaml)**，里面包含三种典型场景的配置模板。以下为字段速查。
+
+### Repo 配置
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `name` | 否 | Web 面板中展示的名称，不填则显示仓库全名 |
+| `secret` | **是** | GitHub Webhook Secret，用于 HMAC-SHA256 签名校验 |
+| `rules` | **是** | 触发规则列表，至少一条 |
+| `healthcheck` | 否 | 健康监控配置 |
+
+### Rule 配置
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `event` | **是** | GitHub 事件类型（`push`、`pull_request`、`release` 等） |
+| `branches` | **是** | 匹配的分支列表。空列表 `[]` 表示所有分支 |
+| `actions` | **是** | 匹配成功后执行的操作列表，至少一项 |
+
+### Action 配置（type: shell）
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `type` | **是** | 固定为 `shell` |
+| `command` | **是** | 要执行的 Shell 命令，支持多行文本 |
+| `env` | 否 | 环境变量，格式 `["KEY=VALUE", ...]` |
+| `timeout` | 否 | 超时时间（秒），默认 `300` |
+| `retryCount` | 否 | 失败重试次数，默认 `0` |
+| `retryDelay` | 否 | 重试间隔（秒），默认 `0` |
+| `workDir` | 否 | 工作目录，默认程序所在目录 |
+
+### Healthcheck 配置
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `url` | **是** | 探测地址。服务定时发送 GET 请求，5 秒超时 |
+| `interval` | **是** | 探测间隔（秒） |
+
+> [!NOTE]
+> 健康检查将 HTTP 200、301、302 视为正常，其余状态码或连接失败视为异常。
+
+## GitHub Webhook 设置
+
+在 GitHub 仓库中进入 **Settings → Webhooks → Add webhook**：
+
+| 配置项 | 值 |
+| --- | --- |
+| Payload URL | `http://你的服务器:9000/webhook` |
+| Content type | `application/json` |
+| Secret | 与配置文件中 `secret` 一致 |
+| Events | 按需选择，如 `push`、`pull_request` |
+
+## Web 面板
+
+通过 `-web` 开启，访问 `/web`。面板提供：
+
+- **整体状态**：项目总数、正常/异常数量
+- **项目卡片**：每个项目的最新健康状态、24 小时可用率柱状图（悬停显示详情）
+- **部署记录**：最近 10 次 Webhook 执行记录，点击可查看 stdout/stderr 日志
+
+### 认证
+
+建议配置 Basic Auth：
+
+```bash
+./webhook-listener -web -user admin -pass your-password
+```
+
+不配置则面板无需认证即可访问。
+
+### 健康检查端点
+
+服务提供 `GET /healthz`，返回 `200 OK`，可用于上游负载均衡或监控系统的健康探测。
+
+## 技术栈
+
+| 层 | 技术 |
+| --- | --- |
+| 后端 | Go + [Gin](https://github.com/gin-gonic/gin) + [GORM](https://gorm.io/) |
+| 数据库 | SQLite（纯 Go 驱动，零依赖） |
+| 前端 | Vue 3 + [Vite](https://vitejs.dev/) + [Tailwind CSS](https://tailwindcss.com/) |
+| 配置 | YAML |
+
+## 目录结构
+
+```
+├── cmd/webhook-listener/main.go   # 入口
+├── config/
+│   └── config.example.yaml        # 配置文件模板
+├── internal/
+│   ├── bootstrap/app.go           # 依赖注入与启动编排
+│   ├── config/                    # 配置解析、SQLite 初始化
+│   ├── handler/                   # HTTP 路由与请求处理
+│   ├── middleware/                # Basic Auth 中间件
+│   ├── model/                     # GORM 模型
+│   ├── queue/                     # Shell 任务调度器、健康监控器
+│   ├── repository/                # 数据访问层
+│   ├── service/                   # 业务逻辑层
+│   └── webui/embed.go             # 嵌入前端静态文件
+├── pkg/utils/                     # 工具函数（签名校验、日志路径）
+├── web/                           # Vue 3 前端源码
+└── Makefile
+```
+
+## 本地开发
+
+```bash
+# 后端
+go run ./cmd/webhook-listener -config config/config.example.yaml
+
+# 前端（开发模式，支持热更新）
+cd web && npm install && npm run dev
+
+# 构建前端并交叉编译
+make build-all
+```
+
+`make build-web` 会将 `web/dist/` 拷贝到 `internal/webui/dist/`，使前端嵌入 Go 二进制中。
+
+## 注意事项
+
+- **端口对外可达**：GitHub 需要能访问你的 `/webhook` 端点，请确保防火墙/安全组放行对应端口
+- **签名校验**：配置文件中的 `secret` 必须与 GitHub Webhook 设置中一致，否则请求会被拒绝（返回 403）
+- **HTTPS**：生产环境建议在 Nginx/Caddy 反代后开启 HTTPS，GitHub 对明文传输的 Webhook 有安全提示
+- **日志持久化**：Shell 命令的 stdout/stderr 保存在可执行文件所在目录的 `logs/shell/` 下，按日期分目录
+- **SQLite 并发**：已启用 WAL 模式，轻量场景下并发写入表现良好。如果是极高频率的 Webhook 场景，可考虑迁移到 PostgreSQL
